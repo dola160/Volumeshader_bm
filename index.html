@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VolumeShader BM - Extreme GPU Benchmark</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            overflow: hidden;
+            user-select: none;
+        }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+        ::-webkit-scrollbar-thumb { background: rgba(51, 65, 85, 0.8); border-radius: 3px; }
+        
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        
+        .glass-button {
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .glass-button:hover {
+            background: rgba(51, 65, 85, 0.8);
+            border-color: rgba(255, 255, 255, 0.25);
+        }
+        
+        .glow-cyan {
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.3);
+        }
+        .glow-red {
+            box-shadow: 0 0 25px rgba(239, 68, 68, 0.4);
+        }
+    </style>
+</head>
+<body class="h-full w-full relative flex flex-col justify-between overflow-hidden">
+
+    <!-- WebGL Canvas Context -->
+    <canvas id="webgl-canvas" class="absolute inset-0 w-full h-full object-cover z-0 cursor-grab active:cursor-grabbing"></canvas>
+
+    <!-- Top Navigation Header -->
+    <header class="relative z-10 p-4 flex justify-between items-center glass-panel m-3 rounded-2xl shadow-2xl border-slate-800 pointer-events-auto">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 via-indigo-600 to-fuchsia-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+                <i class="fa-solid font-black text-white text-lg fa-cubes-stacked"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg tracking-wider text-white flex items-center gap-2">
+                    VOLUMESHADER <span class="bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-fuchsia-500 font-extrabold">BM</span>
+                    <span class="text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800/50">v3.5 Ultra</span>
+                </h1>
+                <p class="text-xs text-slate-400">Volumetric Raymarching & Lighting Shader Stress Test</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 sm:gap-4">
+            <!-- Preset Buttons -->
+            <div class="hidden md:flex bg-slate-900/80 p-1 rounded-xl border border-slate-800">
+                <button onclick="setPreset('mobile')" class="preset-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition" id="btn-preset-mobile">Lite</button>
+                <button onclick="setPreset('medium')" class="preset-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition" id="btn-preset-medium">Medium</button>
+                <button onclick="setPreset('ultra')" class="preset-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-cyan-400 bg-slate-800 shadow" id="btn-preset-ultra">Ultra</button>
+                <button onclick="setPreset('extreme')" class="preset-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-400 hover:text-rose-300 transition" id="btn-preset-extreme">Burner</button>
+            </div>
+
+            <!-- Run Benchmark Button -->
+            <button id="run-bench-btn" onclick="startBenchmark()" class="px-5 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white shadow-lg shadow-cyan-500/25 transition active:scale-95 flex items-center gap-2">
+                <i class="fa-solid fa-play"></i>
+                <span>Run Benchmark</span>
+            </button>
+            
+            <button onclick="toggleSettings()" class="w-10 h-10 rounded-xl glass-button flex items-center justify-center text-slate-300 hover:text-white">
+                <i class="fa-solid fa-sliders"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Telemetry Overlay (Bottom Left) -->
+    <div class="relative z-10 m-3 max-w-sm pointer-events-none space-y-3">
+        <!-- Live Performance Stats Card -->
+        <div class="glass-panel p-4 rounded-2xl pointer-events-auto shadow-2xl border-slate-800/80">
+            <div class="flex justify-between items-baseline mb-2">
+                <span class="text-xs uppercase font-bold tracking-wider text-slate-400">Live Telemetry</span>
+                <span id="gpu-vendor" class="text-[11px] text-cyan-400 font-mono truncate max-w-[180px]">Detecting GPU...</span>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2 text-center mb-3">
+                <div class="bg-slate-900/60 p-2 rounded-xl border border-slate-800/60">
+                    <div class="text-[10px] text-slate-400 font-medium uppercase">FPS</div>
+                    <div id="stat-fps" class="text-2xl font-black text-cyan-400 font-mono">--</div>
+                </div>
+                <div class="bg-slate-900/60 p-2 rounded-xl border border-slate-800/60">
+                    <div class="text-[10px] text-slate-400 font-medium uppercase">Frame Time</div>
+                    <div id="stat-ms" class="text-2xl font-black text-indigo-400 font-mono">-- <span class="text-xs font-normal">ms</span></div>
+                </div>
+                <div class="bg-slate-900/60 p-2 rounded-xl border border-slate-800/60">
+                    <div class="text-[10px] text-slate-400 font-medium uppercase">1% Low</div>
+                    <div id="stat-low" class="text-2xl font-black text-fuchsia-400 font-mono">--</div>
+                </div>
+            </div>
+
+            <!-- Frametime Canvas Graph -->
+            <div class="relative w-full h-12 bg-slate-950/80 rounded-lg overflow-hidden border border-slate-800/80 mb-2">
+                <canvas id="graph-canvas" class="w-full h-full"></canvas>
+            </div>
+
+            <div class="flex justify-between text-xs text-slate-400 font-mono pt-1 border-t border-slate-800/60">
+                <span>Rays/Sec: <strong id="stat-rays" class="text-slate-200">0.0 G</strong></span>
+                <span>Ray Steps: <strong id="stat-steps" class="text-slate-200">256</strong></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Benchmark Progress Modal / Banner -->
+    <div id="bench-banner" class="hidden absolute top-20 left-1/2 -translate-x-1/2 z-20 glass-panel px-6 py-3 rounded-full border border-cyan-500/40 glow-cyan flex items-center gap-4">
+        <div class="w-4 h-4 rounded-full bg-cyan-400 animate-ping"></div>
+        <div>
+            <div class="text-xs font-bold uppercase tracking-widest text-cyan-400">Benchmark in Progress</div>
+            <div id="bench-timer" class="text-sm font-mono font-semibold text-slate-200">Time remaining: 20.0s</div>
+        </div>
+        <div class="w-24 bg-slate-800 h-2 rounded-full overflow-hidden border border-slate-700">
+            <div id="bench-progress-bar" class="h-full bg-gradient-to-r from-cyan-400 to-indigo-500 w-0 transition-all duration-100"></div>
+        </div>
+    </div>
+
+    <!-- Final Score Modal -->
+    <div id="score-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+        <div class="glass-panel max-w-lg w-full rounded-3xl p-6 sm:p-8 border border-cyan-500/30 shadow-2xl relative overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div class="absolute -top-24 -right-24 w-48 h-48 bg-cyan-500/20 rounded-full blur-3xl pointer-events-none"></div>
+            <div class="absolute -bottom-24 -left-24 w-48 h-48 bg-fuchsia-500/20 rounded-full blur-3xl pointer-events-none"></div>
+
+            <div class="text-center space-y-2 mb-6">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-bold uppercase tracking-widest">
+                    <i class="fa-solid fa-award"></i> Benchmark Complete
+                </div>
+                <h2 class="text-3xl font-black text-white tracking-wide">RESULTS SUMMARY</h2>
+                <p id="score-preset-label" class="text-xs text-slate-400 font-mono uppercase">Preset: ULTRA (1080p Raymarching)</p>
+            </div>
+
+            <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 text-center mb-6 shadow-inner">
+                <div class="text-xs uppercase font-bold tracking-widest text-slate-400 mb-1">Volumetric GPU Score</div>
+                <div id="final-score" class="text-5xl font-black bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-indigo-300 to-fuchsia-400 font-mono tracking-tight py-2">
+                    9,845
+                </div>
+                <div id="score-tier" class="text-xs font-semibold text-emerald-400 mt-1">Tier: High-End Desktop GPU</div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 text-xs font-mono mb-6">
+                <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800/80 flex justify-between">
+                    <span class="text-slate-400">Avg FPS:</span>
+                    <strong id="final-avg-fps" class="text-cyan-300">60.2</strong>
+                </div>
+                <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800/80 flex justify-between">
+                    <span class="text-slate-400">1% Low FPS:</span>
+                    <strong id="final-low-fps" class="text-fuchsia-300">42.1</strong>
+                </div>
+                <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800/80 flex justify-between">
+                    <span class="text-slate-400">Avg Frametime:</span>
+                    <strong id="final-avg-ms" class="text-indigo-300">16.6 ms</strong>
+                </div>
+                <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800/80 flex justify-between">
+                    <span class="text-slate-400">GigaSteps/s:</span>
+                    <strong id="final-gigasteps" class="text-amber-300">14.2</strong>
+                </div>
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="closeScoreModal()" class="flex-1 py-3 rounded-xl font-bold text-sm glass-button text-slate-300 hover:text-white">
+                    Close
+                </button>
+                <button onclick="closeScoreModal(); startBenchmark();" class="flex-1 py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white shadow-lg shadow-cyan-500/20">
+                    Re-Run Benchmark
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Drawer -->
+    <div id="settings-drawer" class="hidden absolute top-20 right-3 z-30 w-80 sm:w-96 glass-panel rounded-2xl p-5 shadow-2xl border-slate-800 space-y-4 max-h-[calc(100vh-6rem)] overflow-y-auto">
+        <div class="flex justify-between items-center pb-3 border-b border-slate-800">
+            <h3 class="font-bold text-sm text-white uppercase tracking-wider flex items-center gap-2">
+                <i class="fa-solid fa-sliders text-cyan-400"></i> Render Engine Settings
+            </h3>
+            <button onclick="toggleSettings()" class="text-slate-400 hover:text-white text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- Render Scale -->
+        <div class="space-y-1">
+            <div class="flex justify-between text-xs">
+                <span class="text-slate-300">Render Scale</span>
+                <span id="val-scale" class="text-cyan-400 font-mono">1.0x</span>
+            </div>
+            <input type="range" id="input-scale" min="0.25" max="2.0" step="0.25" value="1.0" class="w-full accent-cyan-500 bg-slate-800 rounded-lg cursor-pointer">
+            <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+                <span>0.25x (Faster)</span>
+                <span>1.0x (Native)</span>
+                <span>2.0x (Supersample)</span>
+            </div>
+        </div>
+
+        <!-- Max Ray Steps -->
+        <div class="space-y-1">
+            <div class="flex justify-between text-xs">
+                <span class="text-slate-300">Raymarch Max Steps</span>
+                <span id="val-steps" class="text-cyan-400 font-mono">256</span>
+            </div>
+            <input type="range" id="input-steps" min="32" max="1024" step="32" value="256" class="w-full accent-cyan-500 bg-slate-800 rounded-lg cursor-pointer">
+        </div>
+
+        <!-- Fractal Octaves -->
+        <div class="space-y-1">
+            <div class="flex justify-between text-xs">
+                <span class="text-slate-300">3D Noise Octaves</span>
+                <span id="val-octaves" class="text-cyan-400 font-mono">5</span>
+            </div>
+            <input type="range" id="input-octaves" min="1" max="8" step="1" value="5" class="w-full accent-cyan-500 bg-slate-800 rounded-lg cursor-pointer">
+        </div>
+
+        <!-- Light Shadow Steps -->
+        <div class="space-y-1">
+            <div class="flex justify-between text-xs">
+                <span class="text-slate-300">Volumetric Shadow Steps</span>
+                <span id="val-shadows" class="text-cyan-400 font-mono">16</span>
+            </div>
+            <input type="range" id="input-shadows" min="0" max="64" step="4" value="16" class="w-full accent-cyan-500 bg-slate-800 rounded-lg cursor-pointer">
+        </div>
+
+        <!-- Volumetric Density -->
+        <div class="space-y-1">
+            <div class="flex justify-between text-xs">
+                <span class="text-slate-300">Volume Density Multiplier</span>
+                <span id="val-density" class="text-cyan-400 font-mono">2.5</span>
+            </div>
+            <input type="range" id="input-density" min="0.5" max="8.0" step="0.5" value="2.5" class="w-full accent-cyan-500 bg-slate-800 rounded-lg cursor-pointer">
+        </div>
+
+        <!-- Post Processing Toggles -->
+        <div class="pt-2 border-t border-slate-800 space-y-2">
+            <label class="flex items-center justify-between cursor-pointer text-xs text-slate-300">
+                <span>Volumetric Scattering Glow</span>
+                <input type="checkbox" id="input-bloom" checked class="w-4 h-4 accent-cyan-500 rounded bg-slate-800 border-slate-700">
+            </label>
+            <label class="flex items-center justify-between cursor-pointer text-xs text-slate-300">
+                <span>Multi-Point Light Absorption</span>
+                <input type="checkbox" id="input-lights" checked class="w-4 h-4 accent-cyan-500 rounded bg-slate-800 border-slate-700">
+            </label>
+            <label class="flex items-center justify-between cursor-pointer text-xs text-slate-300">
+                <span>Animated Camera Orbit</span>
+                <input type="checkbox" id="input-orbit" checked class="w-4 h-4 accent-cyan-500 rounded bg-slate-800 border-slate-700">
+            </label>
+        </div>
+    </div>
+
+    <!-- WebGL Shaders & Engine logic -->
+    <script>
+        // --- WebGL Shaders ---
+        const VS_SOURCE = `#version 300 es
+        in vec2 a_position;
+        out vec2 v_uv;
+        void main() {
+            v_uv = a_position * 0.5 + 0.5;
+            gl_Position = vec4(a_position, 0.0, 1.0);
+        }`;
+
+        const FS_SOURCE = `#version 300 es
+        precision highp float;
+        precision highp int;
+
+        in vec2 v_uv;
+        out vec4 fragColor;
+
+        uniform vec2 u_resolution;
+        uniform float u_time;
+        uniform vec3 u_camPos;
+        uniform vec3 u_camTarget;
+        
+        uniform int u_maxSteps;
+        uniform int u_octaves;
+        uniform int u_shadowSteps;
+        uniform float u_densityScale;
+        uniform bool u_enableBloom;
+        uniform bool u_enableLights;
+
+        // --- Fast 3D Simplex-like Noise Utilities ---
+        vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+        vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+        float snoise(vec3 v) {
+            const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+            const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+
+            vec3 i  = floor(v + dot(v, C.yyy));
+            vec3 x0 = v - i + dot(i, C.xxx);
+
+            vec3 g = step(x0.yzx, x0.xyz);
+            vec3 l = 1.0 - g;
+            vec3 i1 = min(g.xyz, l.zxy);
+            vec3 i2 = max(g.xyz, l.zxy);
+
+            vec3 x1 = x0 - i1 + C.xxx;
+            vec3 x2 = x0 - i2 + C.yyy;
+            vec3 x3 = x0 - D.yyy;
+
+            i = mod289(i);
+            vec4 p = permute(permute(permute(
+                        i.z + vec4(0.0, i1.z, i2.z, 1.0))
+                    + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+                    + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+
+            float n_ = 0.142857142857;
+            vec3 ns = n_ * D.wyz - D.xzx;
+
+            vec4 j = p - 49.0 * floor(p * ns.z);
+
+            vec4 x_ = floor(j * ns.z);
+            vec4 y_ = floor(j - 7.0 * x_);
+
+            vec4 x = x_ *ns.x + ns.yyyy;
+            vec4 y = y_ *ns.x + ns.yyyy;
+            vec4 h = 1.0 - abs(x) - abs(y);
+
+            vec4 b0 = vec4(x.xy, y.xy);
+            vec4 b1 = vec4(x.zw, y.zw);
+
+            vec4 s0 = floor(b0)*2.0 + 1.0;
+            vec4 s1 = floor(b1)*2.0 + 1.0;
+            vec4 sh = -step(h, vec4(0.0));
+
+            vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+            vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+
+            vec3 p0 = vec3(a0.xy, h.x);
+            vec3 p1 = vec3(a0.zw, h.y);
+            vec3 p2 = vec3(a1.xy, h.z);
+            vec3 p3 = vec3(a1.zw, h.w);
+
+            vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+            p0 *= norm.x;
+            p1 *= norm.y;
+            p2 *= norm.z;
+            p3 *= norm.w;
+
+            vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+            m = m * m;
+            return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+        }
+
+        // Fractional Brownian Motion (3D Volume Fractal)
+        float fbm(vec3 p) {
+            float value = 0.0;
+            float amplitude = 0.5;
+            float frequency = 1.0;
+            vec3 shift = vec3(100.0);
+
+            for (int i = 0; i < u_octaves; i++) {
+                value += amplitude * snoise(p * frequency);
+                p = p * 2.02 + shift;
+                amplitude *= 0.5;
+            }
+            return value;
+        }
+
+        // Density Field Evaluation
+        float sampleDensity(vec3 p) {
+            // Distance from center sphere bounding volume
+            float distCenter = length(p) - 2.2;
+            if (distCenter > 1.5) return 0.0;
+
+            // Animated morphing fractal volume
+            vec3 q = p + vec3(u_time * 0.15, u_time * 0.1, u_time * 0.05);
+            float n = fbm(q * 1.2);
+            
+            // Plasma swirl deformation
+            float density = -distCenter + n * 1.8;
+            density = clamp(density, 0.0, 1.0);
+            return density * u_densityScale;
+        }
+
+        // Shadow Ray Marching towards light
+        float shadowRay(vec3 p, vec3 lightDir) {
+            if (u_shadowSteps <= 0) return 1.0;
+            
+            float shadowAcc = 0.0;
+            float stepSize = 0.12;
+            vec3 curr = p;
+
+            for (int i = 0; i < u_shadowSteps; i++) {
+                curr += lightDir * stepSize;
+                shadowAcc += sampleDensity(curr) * stepSize;
+            }
+            return exp(-shadowAcc * 1.5); // Beer-Lambert law shadow attenuation
+        }
+
+        void main() {
+            vec2 st = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
+
+            // Camera Matrix setup
+            vec3 ro = u_camPos;
+            vec3 ta = u_camTarget;
+            vec3 ww = normalize(ta - ro);
+            vec3 uu = normalize(cross(ww, vec3(0.0, 1.0, 0.0)));
+            vec3 vv = normalize(cross(uu, ww));
+            vec3 rd = normalize(st.x * uu + st.y * vv + 1.5 * ww);
+
+            // Bounding box ray intersection [-3.0, 3.0]
+            float tmin = 0.1;
+            float tmax = 8.0;
+            
+            // Dynamic Raymarch Step Math
+            float t = tmin;
+            float stepSize = (tmax - tmin) / float(u_maxSteps);
+            
+            vec3 accumColor = vec3(0.0);
+            float transmittance = 1.0;
+
+            // Light sources
+            vec3 lightPos1 = vec3(3.0 * sin(u_time), 2.5, 3.0 * cos(u_time));
+            vec3 lightColor1 = vec3(0.2, 0.8, 1.0) * 2.5; // Cyan light
+            
+            vec3 lightPos2 = vec3(-2.5 * cos(u_time * 0.7), -1.5, -2.5 * sin(u_time * 0.7));
+            vec3 lightColor2 = vec3(1.0, 0.2, 0.6) * 2.0; // Magenta light
+
+            // Main Raymarching Loop
+            for (int i = 0; i < u_maxSteps; i++) {
+                if (transmittance < 0.01) break; // Early Ray Termination optimization
+
+                vec3 pos = ro + rd * t;
+                float density = sampleDensity(pos);
+
+                if (density > 0.01) {
+                    // Absorption extinction coefficient
+                    float ext = density * stepSize;
+
+                    // Light calculations
+                    vec3 scatteredLight = vec3(0.05); // Ambient
+
+                    if (u_enableLights) {
+                        // Light 1
+                        vec3 lDir1 = normalize(lightPos1 - pos);
+                        float lAtten1 = 1.0 / (1.0 + 0.3 * dot(lightPos1 - pos, lightPos1 - pos));
+                        float sh1 = shadowRay(pos, lDir1);
+                        scatteredLight += lightColor1 * lAtten1 * sh1;
+
+                        // Light 2
+                        vec3 lDir2 = normalize(lightPos2 - pos);
+                        float lAtten2 = 1.0 / (1.0 + 0.3 * dot(lightPos2 - pos, lightPos2 - pos));
+                        float sh2 = shadowRay(pos, lDir2);
+                        scatteredLight += lightColor2 * lAtten2 * sh2;
+                    }
+
+                    // Volumetric Color Ramp based on position density
+                    vec3 volumeColor = mix(vec3(0.05, 0.1, 0.25), vec3(0.9, 0.4, 0.9), density * 0.5);
+                    vec3 currentStepColor = volumeColor * scatteredLight;
+
+                    // Accumulate light energy using Beer-Lambert extinction
+                    accumColor += transmittance * currentStepColor * ext;
+                    transmittance *= exp(-ext * 2.0);
+                }
+
+                t += stepSize;
+            }
+
+            // Dark space background gradient with vignette
+            vec3 bgColor = mix(vec3(0.02, 0.03, 0.06), vec3(0.005, 0.008, 0.015), length(v_uv - 0.5));
+            vec3 finalColor = bgColor * transmittance + accumColor;
+
+            // Optional Volumetric Glow / Bloom post processing
+            if (u_enableBloom) {
+                finalColor += pow(accumColor, vec3(1.5)) * 0.4;
+            }
+
+            // ACES Film Tone Mapping & Gamma Correction
+            finalColor = (finalColor * (2.51 * finalColor + 0.03)) / (finalColor * (2.43 * finalColor + 0.59) + 0.14);
+            finalColor = pow(clamp(finalColor, 0.0, 1.0), vec3(1.0 / 2.2));
+
+            fragColor = vec4(finalColor, 1.0);
+        }`;
+
+        // --- Application State ---
+        let gl, program;
+        let canvas, graphCanvas, graphCtx;
+        let locations = {};
+
+        // Config Params
+        let config = {
+            scale: 1.0,
+            maxSteps: 256,
+            octaves: 5,
+            shadowSteps: 16,
+            densityScale: 2.5,
+            bloom: true,
+            lights: true,
+            orbit: true
+        };
+
+        // Telemetry State
+        let frameTimes = [];
+        let lastTimestamp = performance.now();
+        let frameCount = 0;
+        let fpsTimer = performance.now();
+        let currentFPS = 0;
+        let current1percentLow = 0;
+
+        // Benchmark State
+        let isBenchmarking = false;
+        let benchStartTime = 0;
+        let benchDuration = 20000; // 20 seconds
+        let benchFrames = [];
+
+        // Camera control state
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+        let cameraAngle = { x: 0.4, y: 0.0 };
+        let cameraDistance = 4.2;
+
+        // Preset Configurations
+        const PRESETS = {
+            mobile: { scale: 0.5, maxSteps: 64, octaves: 3, shadowSteps: 0, densityScale: 2.0, bloom: false, lights: true, orbit: true },
+            medium: { scale: 0.75, maxSteps: 128, octaves: 4, shadowSteps: 8, densityScale: 2.5, bloom: true, lights: true, orbit: true },
+            ultra:  { scale: 1.0, maxSteps: 256, octaves: 5, shadowSteps: 16, densityScale: 2.5, bloom: true, lights: true, orbit: true },
+            extreme:{ scale: 1.5, maxSteps: 512, octaves: 7, shadowSteps: 32, densityScale: 3.5, bloom: true, lights: true, orbit: true }
+        };
+
+        // --- WebGL Initialization ---
+        function initWebGL() {
+            canvas = document.getElementById('webgl-canvas');
+            gl = canvas.getContext('webgl2', { powerPreference: "high-performance", antialias: false });
+
+            if (!gl) {
+                alert("WebGL 2 is not supported on this browser or hardware!");
+                return;
+            }
+
+            // Unmasked GPU Vendor Detection
+            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+            if (debugInfo) {
+                const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                document.getElementById('gpu-vendor').innerText = renderer || "Generic WebGL2 GPU";
+            } else {
+                document.getElementById('gpu-vendor').innerText = "WebGL2 Standard Engine";
+            }
+
+            // Create Shaders
+            const vs = createShader(gl, gl.VERTEX_SHADER, VS_SOURCE);
+            const fs = createShader(gl, gl.FRAGMENT_SHADER, FS_SOURCE);
+            program = gl.createProgram();
+            gl.attachShader(program, vs);
+            gl.attachShader(program, fs);
+            gl.linkProgram(program);
+
+            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                console.error(gl.getProgramInfoLog(program));
+                return;
+            }
+
+            // Setup Screen Quad Vertex Buffer
+            const positionBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+                -1, -1,  1, -1, -1,  1,
+                -1,  1,  1, -1,  1,  1
+            ]), gl.STATIC_DRAW);
+
+            const vao = gl.createVertexArray();
+            gl.bindVertexArray(vao);
+            const posAttributeLocation = gl.getAttribLocation(program, "a_position");
+            gl.enableVertexAttribArray(posAttributeLocation);
+            gl.vertexAttribPointer(posAttributeLocation, 2, gl.FLOAT, false, 0, 0);
+
+            // Fetch Uniform Locations
+            locations = {
+                resolution: gl.getUniformLocation(program, "u_resolution"),
+                time: gl.getUniformLocation(program, "u_time"),
+                camPos: gl.getUniformLocation(program, "u_camPos"),
+                camTarget: gl.getUniformLocation(program, "u_camTarget"),
+                maxSteps: gl.getUniformLocation(program, "u_maxSteps"),
+                octaves: gl.getUniformLocation(program, "u_octaves"),
+                shadowSteps: gl.getUniformLocation(program, "u_shadowSteps"),
+                densityScale: gl.getUniformLocation(program, "u_densityScale"),
+                enableBloom: gl.getUniformLocation(program, "u_enableBloom"),
+                enableLights: gl.getUniformLocation(program, "u_enableLights")
+            };
+
+            // Init Graph Canvas
+            graphCanvas = document.getElementById('graph-canvas');
+            graphCtx = graphCanvas.getContext('2d');
+
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            setupControls();
+
+            requestAnimationFrame(render);
+        }
+
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error(gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+
+        function resizeCanvas() {
+            const displayWidth  = Math.floor(window.innerWidth * config.scale);
+            const displayHeight = Math.floor(window.innerHeight * config.scale);
+
+            if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+                canvas.width  = displayWidth;
+                canvas.height = displayHeight;
+            }
+
+            // Resize graph canvas internal buffer
+            graphCanvas.width = graphCanvas.clientWidth;
+            graphCanvas.height = graphCanvas.clientHeight;
+        }
+
+        // --- Render Loop ---
+        function render(now) {
+            const delta = now - lastTimestamp;
+            lastTimestamp = now;
+
+            // Track Frametimes
+            if (delta > 0 && delta < 500) {
+                frameTimes.push(delta);
+                if (frameTimes.length > 100) frameTimes.shift();
+
+                if (isBenchmarking) {
+                    benchFrames.push(delta);
+                }
+            }
+
+            // Update FPS Stats every 250ms
+            frameCount++;
+            if (now - fpsTimer >= 250) {
+                currentFPS = Math.round((frameCount * 1000) / (now - fpsTimer));
+                const avgMs = (delta).toFixed(1);
+
+                // Calculate 1% Low FPS
+                if (frameTimes.length > 10) {
+                    const sorted = [...frameTimes].sort((a, b) => b - a);
+                    const lowIndex = Math.floor(sorted.length * 0.99);
+                    current1percentLow = Math.max(1, Math.round(1000 / sorted[lowIndex]));
+                }
+
+                document.getElementById('stat-fps').innerText = currentFPS;
+                document.getElementById('stat-ms').innerHTML = `${avgMs} <span class="text-xs font-normal">ms</span>`;
+                document.getElementById('stat-low').innerText = current1percentLow;
+
+                // GigaSteps/sec estimation: Total Pixels * Max Steps * FPS
+                const totalRays = (canvas.width * canvas.height * config.maxSteps * currentFPS) / 1e9;
+                document.getElementById('stat-rays').innerText = totalRays.toFixed(2) + " G";
+                document.getElementById('stat-steps').innerText = config.maxSteps;
+
+                frameCount = 0;
+                fpsTimer = now;
+
+                drawGraph();
+            }
+
+            // Handle Benchmark Logic
+            if (isBenchmarking) {
+                const elapsed = now - benchStartTime;
+                const remaining = Math.max(0, (benchDuration - elapsed) / 1000);
+                document.getElementById('bench-timer').innerText = `Time remaining: ${remaining.toFixed(1)}s`;
+                document.getElementById('bench-progress-bar').style.width = `${(elapsed / benchDuration) * 100}%`;
+
+                // Automated Camera Path during benchmark
+                const progress = elapsed / benchDuration;
+                cameraAngle.y = progress * Math.PI * 4;
+                cameraAngle.x = Math.sin(progress * Math.PI * 2) * 0.6 + 0.3;
+
+                if (elapsed >= benchDuration) {
+                    finishBenchmark();
+                }
+            } else if (config.orbit) {
+                cameraAngle.y += 0.005;
+            }
+
+            // Render Shader Pass
+            gl.viewport(0, 0, canvas.width, canvas.height);
+            gl.useProgram(program);
+
+            // Compute Camera Position
+            const camX = cameraDistance * Math.cos(cameraAngle.x) * Math.sin(cameraAngle.y);
+            const camY = cameraDistance * Math.sin(cameraAngle.x);
+            const camZ = cameraDistance * Math.cos(cameraAngle.x) * Math.cos(cameraAngle.y);
+
+            gl.uniform2f(locations.resolution, canvas.width, canvas.height);
+            gl.uniform1f(locations.time, now * 0.001);
+            gl.uniform3f(locations.camPos, camX, camY, camZ);
+            gl.uniform3f(locations.camTarget, 0.0, 0.0, 0.0);
+
+            gl.uniform1i(locations.maxSteps, config.maxSteps);
+            gl.uniform1i(locations.octaves, config.octaves);
+            gl.uniform1i(locations.shadowSteps, config.shadowSteps);
+            gl.uniform1f(locations.densityScale, config.densityScale);
+            gl.uniform1i(locations.enableBloom, config.bloom ? 1 : 0);
+            gl.uniform1i(locations.enableLights, config.lights ? 1 : 0);
+
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+            requestAnimationFrame(render);
+        }
+
+        // --- Draw Frametime Graph ---
+        function drawGraph() {
+            const w = graphCanvas.width;
+            const h = graphCanvas.height;
+            graphCtx.clearRect(0, 0, w, h);
+
+            if (frameTimes.length < 2) return;
+
+            graphCtx.beginPath();
+            graphCtx.strokeStyle = '#06b6d4';
+            graphCtx.lineWidth = 1.5;
+
+            const maxMs = 50; // Cap scale at 50ms (20fps line)
+            const stepX = w / (frameTimes.length - 1);
+
+            for (let i = 0; i < frameTimes.length; i++) {
+                const x = i * stepX;
+                const y = h - Math.min(1.0, frameTimes[i] / maxMs) * h;
+                if (i === 0) graphCtx.moveTo(x, y);
+                else graphCtx.lineTo(x, y);
+            }
+            graphCtx.stroke();
+        }
+
+        // --- Benchmark Logic & Scoring ---
+        function startBenchmark() {
+            if (isBenchmarking) return;
+
+            isBenchmarking = true;
+            benchStartTime = performance.now();
+            benchFrames = [];
+
+            document.getElementById('bench-banner').classList.remove('hidden');
+            document.getElementById('run-bench-btn').disabled = true;
+            document.getElementById('run-bench-btn').classList.add('opacity-50');
+        }
+
+        function finishBenchmark() {
+            isBenchmarking = false;
+            document.getElementById('bench-banner').classList.add('hidden');
+            document.getElementById('run-bench-btn').disabled = false;
+            document.getElementById('run-bench-btn').classList.remove('opacity-50');
+
+            if (benchFrames.length === 0) return;
+
+            // Compute Benchmark Metrics
+            const totalMs = benchFrames.reduce((a, b) => a + b, 0);
+            const avgMs = totalMs / benchFrames.length;
+            const avgFPS = 1000 / avgMs;
+
+            const sorted = [...benchFrames].sort((a, b) => b - a);
+            const lowIndex = Math.floor(sorted.length * 0.99);
+            const low1Ms = sorted[lowIndex] || avgMs;
+            const low1FPS = 1000 / low1Ms;
+
+            // GigaSteps Metric
+            const totalGigaSteps = (canvas.width * canvas.height * config.maxSteps * avgFPS) / 1e9;
+
+            // Score Formula: Weighted Pixels * Steps * FPS multiplier
+            const pixelFactor = (canvas.width * canvas.height) / (1920 * 1080);
+            const stepFactor = config.maxSteps / 256;
+            const octaveFactor = config.octaves / 5;
+            const shadowFactor = (config.shadowSteps + 4) / 20;
+
+            const rawScore = Math.round(
+                avgFPS * 150 * pixelFactor * stepFactor * octaveFactor * shadowFactor
+            );
+
+            // Display Results
+            document.getElementById('final-score').innerText = rawScore.toLocaleString();
+            document.getElementById('final-avg-fps').innerText = avgFPS.toFixed(1);
+            document.getElementById('final-low-fps').innerText = low1FPS.toFixed(1);
+            document.getElementById('final-avg-ms').innerText = `${avgMs.toFixed(1)} ms`;
+            document.getElementById('final-gigasteps').innerText = totalGigaSteps.toFixed(2);
+
+            // Score Tier Classification
+            let tierText = "Entry Level GPU / Integrated Graphics";
+            let tierColor = "text-slate-400";
+            if (rawScore > 18000) { tierText = "God Tier: Enthusiast Workstation / Flagship GPU"; tierColor = "text-fuchsia-400"; }
+            else if (rawScore > 12000) { tierText = "High Tier: Enthusiast Gaming GPU"; tierColor = "text-cyan-400"; }
+            else if (rawScore > 7000) { tierText = "Mid Tier: Mainstream Gaming GPU"; tierColor = "text-emerald-400"; }
+            else if (rawScore > 3000) { tierText = "Mobile / Entry Level Discrete GPU"; tierColor = "text-amber-400"; }
+
+            const tierEl = document.getElementById('score-tier');
+            tierEl.innerText = `Tier: ${tierText}`;
+            tierEl.className = `text-xs font-semibold ${tierColor} mt-1`;
+
+            document.getElementById('score-modal').classList.remove('hidden');
+        }
+
+        function closeScoreModal() {
+            document.getElementById('score-modal').classList.add('hidden');
+        }
+
+        // --- Controls & Inputs ---
+        function setPreset(presetKey) {
+            const p = PRESETS[presetKey];
+            if (!p) return;
+
+            config = { ...p };
+
+            // Update UI sliders
+            document.getElementById('input-scale').value = config.scale;
+            document.getElementById('val-scale').innerText = `${config.scale}x`;
+
+            document.getElementById('input-steps').value = config.maxSteps;
+            document.getElementById('val-steps').innerText = config.maxSteps;
+
+            document.getElementById('input-octaves').value = config.octaves;
+            document.getElementById('val-octaves').innerText = config.octaves;
+
+            document.getElementById('input-shadows').value = config.shadowSteps;
+            document.getElementById('val-shadows').innerText = config.shadowSteps;
+
+            document.getElementById('input-density').value = config.densityScale;
+            document.getElementById('val-density').innerText = config.densityScale;
+
+            document.getElementById('input-bloom').checked = config.bloom;
+            document.getElementById('input-lights').checked = config.lights;
+            document.getElementById('input-orbit').checked = config.orbit;
+
+            // Highlight Active Preset Button
+            document.querySelectorAll('.preset-btn').forEach(btn => {
+                btn.className = "preset-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition";
+            });
+            const activeBtn = document.getElementById(`btn-preset-${presetKey}`);
+            if (activeBtn) {
+                activeBtn.className = "preset-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-cyan-400 bg-slate-800 shadow";
+            }
+
+            document.getElementById('score-preset-label').innerText = `Preset: ${presetKey.toUpperCase()} (${canvas.width}x${canvas.height})`;
+
+            resizeCanvas();
+        }
+
+        function toggleSettings() {
+            const drawer = document.getElementById('settings-drawer');
+            drawer.classList.toggle('hidden');
+        }
+
+        function setupControls() {
+            // Slider listeners
+            document.getElementById('input-scale').addEventListener('input', (e) => {
+                config.scale = parseFloat(e.target.value);
+                document.getElementById('val-scale').innerText = `${config.scale}x`;
+                resizeCanvas();
+            });
+
+            document.getElementById('input-steps').addEventListener('input', (e) => {
+                config.maxSteps = parseInt(e.target.value);
+                document.getElementById('val-steps').innerText = config.maxSteps;
+            });
+
+            document.getElementById('input-octaves').addEventListener('input', (e) => {
+                config.octaves = parseInt(e.target.value);
+                document.getElementById('val-octaves').innerText = config.octaves;
+            });
+
+            document.getElementById('input-shadows').addEventListener('input', (e) => {
+                config.shadowSteps = parseInt(e.target.value);
+                document.getElementById('val-shadows').innerText = config.shadowSteps;
+            });
+
+            document.getElementById('input-density').addEventListener('input', (e) => {
+                config.densityScale = parseFloat(e.target.value);
+                document.getElementById('val-density').innerText = config.densityScale;
+            });
+
+            document.getElementById('input-bloom').addEventListener('change', (e) => config.bloom = e.target.checked);
+            document.getElementById('input-lights').addEventListener('change', (e) => config.lights = e.target.checked);
+            document.getElementById('input-orbit').addEventListener('change', (e) => config.orbit = e.target.checked);
+
+            // Orbit mouse/touch drag controls
+            const onPointerDown = (x, y) => {
+                isDragging = true;
+                previousMousePosition = { x, y };
+                config.orbit = false;
+                document.getElementById('input-orbit').checked = false;
+            };
+
+            const onPointerMove = (x, y) => {
+                if (!isDragging) return;
+                const deltaX = x - previousMousePosition.x;
+                const deltaY = y - previousMousePosition.y;
+
+                cameraAngle.y -= deltaX * 0.005;
+                cameraAngle.x = Math.max(-Math.PI * 0.45, Math.min(Math.PI * 0.45, cameraAngle.x + deltaY * 0.005));
+
+                previousMousePosition = { x, y };
+            };
+
+            const onPointerUp = () => { isDragging = false; };
+
+            canvas.addEventListener('mousedown', (e) => onPointerDown(e.clientX, e.clientY));
+            window.addEventListener('mousemove', (e) => onPointerMove(e.clientX, e.clientY));
+            window.addEventListener('mouseup', onPointerUp);
+
+            canvas.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 1) onPointerDown(e.touches[0].clientX, e.touches[0].clientY);
+            });
+            window.addEventListener('touchmove', (e) => {
+                if (e.touches.length === 1) onPointerMove(e.touches[0].clientX, e.touches[0].clientY);
+            });
+            window.addEventListener('touchend', onPointerUp);
+
+            // Mouse wheel zoom
+            canvas.addEventListener('wheel', (e) => {
+                cameraDistance = Math.max(1.5, Math.min(10.0, cameraDistance + e.deltaY * 0.003));
+            });
+        }
+
+        window.onload = initWebGL;
+    </script>
+</body>
+</html>
