@@ -1,852 +1,1128 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>3D Volumetric Fractal Raymarcher</title>
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      user-select: none;
-    }
-    body, html {
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background-color: #000;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      color: #e0e0e0;
-    }
-    #canvas-container {
-      width: 100vw;
-      height: 100vh;
-      position: absolute;
-      top: 0;
-      left: 0;
-    }
-    canvas {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Volume Shader BM - GPU Benchmark</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js cho biểu đồ Frame Time -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    /* Config Button matching screenshot style */
-    .config-btn {
-      position: absolute;
-      top: 12px;
-      left: 12px;
-      z-index: 100;
-      background: rgba(255, 255, 255, 0.95);
-      color: #000;
-      border: 1px solid #ccc;
-      border-radius: 2px;
-      padding: 4px 10px;
-      font-size: 13px;
-      font-weight: 600;
-      font-family: monospace;
-      letter-spacing: 0.5px;
-      cursor: pointer;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
-      transition: all 0.15s ease;
-    }
-    .config-btn:hover {
-      background: #ffffff;
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.7);
-    }
-    .config-btn:active {
-      transform: translateY(0);
-    }
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #05070f;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            user-select: none;
+        }
 
-    /* Stats Badge */
-    .stats-badge {
-      position: absolute;
-      top: 12px;
-      right: 12px;
-      z-index: 90;
-      background: rgba(0, 0, 0, 0.65);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 6px;
-      padding: 6px 12px;
-      font-family: monospace;
-      font-size: 12px;
-      color: #38ef7d;
-      pointer-events: none;
-      display: flex;
-      gap: 12px;
-    }
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
 
-    /* Control Panel Drawer */
-    .panel {
-      position: absolute;
-      top: 48px;
-      left: 12px;
-      z-index: 100;
-      width: 320px;
-      max-height: calc(100vh - 64px);
-      background: rgba(16, 18, 27, 0.88);
-      backdrop-filter: blur(16px);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      border-radius: 8px;
-      padding: 16px;
-      overflow-y: auto;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-      transition: opacity 0.2s ease, transform 0.2s ease;
-    }
-    .panel.hidden {
-      opacity: 0;
-      pointer-events: none;
-      transform: translateY(-10px) scale(0.98);
-    }
-    
-    .panel-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 14px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      padding-bottom: 8px;
-    }
-    .panel-header h2 {
-      font-size: 14px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: #64ffda;
-    }
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
 
-    .section-title {
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1.2px;
-      color: #8892b0;
-      margin: 14px 0 8px 0;
-    }
+        /* Glassmorphism UI Style */
+        .glass-panel {
+            background: rgba(13, 17, 28, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+        }
 
-    .control-group {
-      margin-bottom: 10px;
-    }
-    .control-group label {
-      display: flex;
-      justify-content: space-between;
-      font-size: 12px;
-      color: #ccd6f6;
-      margin-bottom: 4px;
-    }
-    .control-group label span.val {
-      color: #64ffda;
-      font-family: monospace;
-    }
+        .glass-button {
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            transition: all 0.2s ease;
+        }
 
-    input[type="range"] {
-      width: 100%;
-      height: 4px;
-      background: rgba(255, 255, 255, 0.15);
-      border-radius: 2px;
-      appearance: none;
-      outline: none;
-    }
-    input[type="range"]::-webkit-slider-thumb {
-      appearance: none;
-      width: 14px;
-      height: 14px;
-      border-radius: 50%;
-      background: #64ffda;
-      cursor: pointer;
-      transition: transform 0.1s;
-    }
-    input[type="range"]::-webkit-slider-thumb:hover {
-      transform: scale(1.2);
-    }
+        .glass-button:hover {
+            background: rgba(59, 130, 246, 0.5);
+            border-color: rgba(96, 165, 250, 0.5);
+            transform: translateY(-1px);
+        }
 
-    select, button.action-btn {
-      width: 100%;
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      color: #fff;
-      padding: 6px 10px;
-      border-radius: 4px;
-      font-size: 12px;
-      outline: none;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-    select:hover, button.action-btn:hover {
-      background: rgba(255, 255, 255, 0.18);
-    }
-    option {
-      background: #111;
-      color: #fff;
-    }
+        .glass-button.active {
+            background: rgba(37, 99, 235, 0.8);
+            border-color: #60a5fa;
+            box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
+        }
 
-    .btn-row {
-      display: flex;
-      gap: 8px;
-      margin-top: 12px;
-    }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.4);
+        }
 
-    /* Crosshair helper */
-    .crosshair {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 6px;
-      height: 6px;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 50%;
-      opacity: 0.5;
-    }
-
-    /* Scrollbar customization */
-    .panel::-webkit-scrollbar {
-      width: 5px;
-    }
-    .panel::-webkit-scrollbar-track {
-      background: rgba(0,0,0,0.2);
-    }
-    .panel::-webkit-scrollbar-thumb {
-      background: rgba(255,255,255,0.2);
-      border-radius: 3px;
-    }
-  </style>
+        /* Pulse Animations */
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 15px rgba(59, 130, 246, 0.4); }
+            50% { box-shadow: 0 0 25px rgba(59, 130, 246, 0.8); }
+        }
+        .glow-effect {
+            animation: pulse-glow 2s infinite;
+        }
+    </style>
 </head>
-<body>
+<body class="text-slate-100">
 
-  <div id="canvas-container">
-    <canvas id="glcanvas"></canvas>
-  </div>
-
-  <button class="config-btn" id="configToggle">CONFIG</button>
-
-  <div class="stats-badge">
-    <div>FPS: <span id="fpsVal">--</span></div>
-    <div>Steps: <span id="stepsVal">128</span></div>
-  </div>
-
-  <div class="crosshair"></div>
-
-  <div class="panel hidden" id="controlPanel">
-    <div class="panel-header">
-      <h2>Fractal & Performance Settings</h2>
+    <!-- WebGL Canvas Container -->
+    <div id="canvas-container">
+        <canvas id="glCanvas"></canvas>
     </div>
 
-    <div class="section-title">Performance Tuning</div>
-    
-    <div class="control-group">
-      <label>Render Scale <span class="val" id="renderScaleVal">1.0x</span></label>
-      <input type="range" id="renderScale" min="0.25" max="1.5" step="0.05" value="1.0">
+    <!-- UI Overlay Header / Telemetry -->
+    <header class="absolute top-4 left-4 right-4 z-10 flex flex-wrap justify-between items-center gap-4 pointer-events-none">
+        <!-- Title & GPU Name -->
+        <div class="glass-panel px-5 py-3 rounded-2xl pointer-events-auto flex items-center gap-4">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xl font-bold shadow-lg shadow-blue-500/30">
+                <i class="fa-solid fa-cube"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-wider text-white flex items-center gap-2">
+                    VOLUME SHADER <span class="text-blue-400 text-xs px-2 py-0.5 rounded bg-blue-500/20 border border-blue-400/30">BM v2.5</span>
+                </h1>
+                <p id="gpu-info" class="text-xs text-slate-400 font-mono">Đang khởi tạo GPU...</p>
+            </div>
+        </div>
+
+        <!-- Live Metrics Cards -->
+        <div class="flex items-center gap-3 pointer-events-auto">
+            <!-- FPS Badge -->
+            <div class="glass-panel px-4 py-2.5 rounded-xl flex items-center gap-3">
+                <i class="fa-solid fa-gauge-high text-emerald-400 text-lg"></i>
+                <div>
+                    <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Tốc độ (FPS)</div>
+                    <div id="fps-val" class="text-xl font-extrabold text-emerald-400 font-mono">0.0</div>
+                </div>
+            </div>
+
+            <!-- Frame Time Badge -->
+            <div class="glass-panel px-4 py-2.5 rounded-xl flex items-center gap-3">
+                <i class="fa-solid fa-clock text-cyan-400 text-lg"></i>
+                <div>
+                    <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Độ trễ Frame</div>
+                    <div id="ms-val" class="text-xl font-extrabold text-cyan-400 font-mono">0.0 ms</div>
+                </div>
+            </div>
+
+            <!-- Rays / Step Count Badge -->
+            <div class="glass-panel px-4 py-2.5 rounded-xl hidden sm:flex items-center gap-3">
+                <i class="fa-solid fa-layer-group text-purple-400 text-lg"></i>
+                <div>
+                    <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Số bước Marching</div>
+                    <div id="steps-val-display" class="text-xl font-extrabold text-purple-400 font-mono">256</div>
+                </div>
+            </div>
+
+            <!-- Run Benchmark Button -->
+            <button id="btn-run-bm" onclick="startBenchmark()" class="glow-effect bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold px-5 py-3 rounded-xl shadow-lg flex items-center gap-2 transition-all transform active:scale-95 pointer-events-auto cursor-pointer border border-blue-400/30">
+                <i class="fa-solid fa-bolt text-yellow-300"></i>
+                <span class="hidden md:inline">CHẠY ĐÁNH GIÁ GPU</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Sidebar Controls -->
+    <aside class="absolute top-24 left-4 bottom-6 w-80 z-10 glass-panel rounded-2xl p-4 flex flex-col justify-between overflow-y-auto hidden md:flex">
+        <div class="space-y-5">
+            <!-- Header section -->
+            <div class="flex items-center justify-between border-b border-slate-700/60 pb-3">
+                <span class="font-bold text-sm tracking-wider uppercase text-slate-200 flex items-center gap-2">
+                    <i class="fa-solid fa-sliders text-blue-400"></i> Cấu Hình Raymarching
+                </span>
+                <button onclick="resetDefaults()" class="text-xs text-slate-400 hover:text-white transition-colors" title="Đặt lại mặc định">
+                    <i class="fa-solid fa-rotate-left"></i>
+                </button>
+            </div>
+
+            <!-- 1. Volume Preset Selection -->
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wider">Mô Hình Volumetric (Thể tích 3D)</label>
+                <div class="grid grid-cols-1 gap-1.5">
+                    <button class="glass-button preset-btn active text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2" onclick="selectVolume(0, this)">
+                        <i class="fa-solid fa-cloud text-blue-400 w-4"></i> Đám Mây Simplex Noise
+                    </button>
+                    <button class="glass-button preset-btn text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2" onclick="selectVolume(1, this)">
+                        <i class="fa-solid fa-atom text-purple-400 w-4"></i> 4D Quaternion Julia Fractal
+                    </button>
+                    <button class="glass-button preset-btn text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2" onclick="selectVolume(2, this)">
+                        <i class="fa-solid fa-cubes text-emerald-400 w-4"></i> Cấu Trúc Bọt Gyroid SDF
+                    </button>
+                    <button class="glass-button preset-btn text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2" onclick="selectVolume(3, this)">
+                        <i class="fa-solid fa-compact-disc text-amber-400 w-4"></i> Mandelbulb 3D Fractal
+                    </button>
+                    <button class="glass-button preset-btn text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2" onclick="selectVolume(4, this)">
+                        <i class="fa-solid fa-brain text-rose-400 w-4"></i> Mô Phỏng Quét CT Y Khoa
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2. Rendering Method -->
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wider">Thuật Toán Render</label>
+                <div class="grid grid-cols-3 gap-1">
+                    <button class="glass-button render-btn active py-2 rounded-lg text-[11px] font-semibold text-center" onclick="selectRenderMethod(0, this)">
+                        Isosurface
+                    </button>
+                    <button class="glass-button render-btn py-2 rounded-lg text-[11px] font-semibold text-center" onclick="selectRenderMethod(1, this)">
+                        Absorption
+                    </button>
+                    <button class="glass-button render-btn py-2 rounded-lg text-[11px] font-semibold text-center" onclick="selectRenderMethod(2, this)">
+                        MIP
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3. Quality & GPU Load Sliders -->
+            <div class="space-y-3 pt-2 border-t border-slate-700/60">
+                <!-- Max Steps Slider -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-slate-300 font-medium">Số Bước Marching Max</span>
+                        <span id="steps-label" class="font-mono text-blue-400">256</span>
+                    </div>
+                    <input type="range" id="slider-steps" min="16" max="1024" step="16" value="256" oninput="updateSteps(this.value)" class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                </div>
+
+                <!-- Resolution Scale Slider -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-slate-300 font-medium">Tỷ Lệ Độ Phân Giải</span>
+                        <span id="scale-label" class="font-mono text-blue-400">1.0x</span>
+                    </div>
+                    <input type="range" id="slider-scale" min="0.25" max="2.0" step="0.25" value="1.0" oninput="updateScale(this.value)" class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                </div>
+
+                <!-- Density / Threshold Slider -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-slate-300 font-medium">Mật Độ / Ngưỡng Isovalue</span>
+                        <span id="density-label" class="font-mono text-blue-400">1.0</span>
+                    </div>
+                    <input type="range" id="slider-density" min="0.1" max="3.0" step="0.1" value="1.0" oninput="updateDensity(this.value)" class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                </div>
+
+                <!-- Shadows Toggle -->
+                <div class="flex items-center justify-between pt-1">
+                    <span class="text-xs text-slate-300 font-medium">Bóng Đổ Động (Shadow Rays)</span>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="toggle-shadows" onchange="toggleShadows(this.checked)" class="sr-only peer" checked>
+                        <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- 4. Color Palette (Transfer Function) -->
+            <div class="pt-2 border-t border-slate-700/60">
+                <label class="block text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wider">Bảng Màu (Transfer Map)</label>
+                <div class="grid grid-cols-4 gap-1.5">
+                    <button class="glass-button palette-btn active py-1.5 text-center text-xs rounded" onclick="selectPalette(0, this)">Flame</button>
+                    <button class="glass-button palette-btn py-1.5 text-center text-xs rounded" onclick="selectPalette(1, this)">Ocean</button>
+                    <button class="glass-button palette-btn py-1.5 text-center text-xs rounded" onclick="selectPalette(2, this)">Cyber</button>
+                    <button class="glass-button palette-btn py-1.5 text-center text-xs rounded" onclick="selectPalette(3, this)">X-Ray</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mini Live Frame Time Chart -->
+        <div class="pt-3 border-t border-slate-700/60">
+            <div class="flex justify-between items-center mb-1">
+                <span class="text-[10px] uppercase font-bold text-slate-400">Biểu Đồ Frame Time (ms)</span>
+                <span id="chart-avg-ms" class="text-[10px] font-mono text-cyan-400">Avg: --ms</span>
+            </div>
+            <div class="h-16 w-full">
+                <canvas id="miniChart"></canvas>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Mobile Drawer Toggle Button -->
+    <button onclick="toggleMobileMenu()" class="md:hidden fixed bottom-4 right-4 z-20 glass-panel w-12 h-12 rounded-full flex items-center justify-center text-xl text-blue-400 border border-blue-400/40 shadow-lg">
+        <i class="fa-solid fa-bars"></i>
+    </button>
+
+    <!-- Benchmark Progress Modal -->
+    <div id="bm-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md hidden p-4">
+        <div class="glass-panel w-full max-w-lg rounded-2xl p-6 border border-blue-500/30 shadow-2xl relative">
+            <div class="text-center mb-6">
+                <div class="w-16 h-16 rounded-2xl bg-blue-600/20 border border-blue-400/30 text-blue-400 flex items-center justify-center text-3xl mx-auto mb-3">
+                    <i class="fa-solid fa-microchip animate-pulse"></i>
+                </div>
+                <h2 class="text-2xl font-black tracking-wide text-white">ĐANG ĐÁNH GIÁ GPU...</h2>
+                <p id="bm-status-text" class="text-xs text-blue-400 font-mono mt-1">Đang thực hiện bài kiểm tra 1/4...</p>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="w-full bg-slate-800 h-3 rounded-full overflow-hidden mb-6 border border-slate-700">
+                <div id="bm-progress-bar" class="bg-gradient-to-r from-blue-500 to-indigo-500 h-full w-0 transition-all duration-300"></div>
+            </div>
+
+            <!-- Live Test Metrics -->
+            <div class="grid grid-cols-2 gap-3 mb-6 font-mono text-xs">
+                <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+                    <span class="text-slate-400 block text-[10px] uppercase">FPS Hiện Tại</span>
+                    <span id="bm-live-fps" class="text-lg font-bold text-emerald-400">0.0</span>
+                </div>
+                <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+                    <span class="text-slate-400 block text-[10px] uppercase">Thời Gian Khung Hình</span>
+                    <span id="bm-live-ms" class="text-lg font-bold text-cyan-400">0.0 ms</span>
+                </div>
+            </div>
+
+            <div class="text-center text-xs text-slate-500">
+                Vui lòng không đóng trình duyệt trong khi bài kiểm tra đang chạy.
+            </div>
+        </div>
     </div>
 
-    <div class="control-group">
-      <label>Max Raymarch Steps <span class="val" id="maxStepsVal">128</span></label>
-      <input type="range" id="maxSteps" min="32" max="256" step="16" value="128">
+    <!-- Benchmark Results Modal -->
+    <div id="result-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md hidden p-4">
+        <div class="glass-panel w-full max-w-xl rounded-3xl p-6 sm:p-8 border border-blue-500/40 shadow-2xl relative overflow-hidden">
+            <!-- Background Glow -->
+            <div class="absolute -top-24 -right-24 w-60 h-60 bg-blue-600/20 rounded-full blur-3xl pointer-events-none"></div>
+
+            <div class="flex justify-between items-start mb-6">
+                <div>
+                    <h2 class="text-2xl font-extrabold text-white">KẾT QUẢ ĐÁNH GIÁ GPU</h2>
+                    <p id="res-gpu-name" class="text-xs text-slate-400 font-mono mt-0.5">Graphics Device</p>
+                </div>
+                <button onclick="closeResultModal()" class="text-slate-400 hover:text-white text-xl">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Big Score Badge -->
+            <div class="bg-slate-900/80 border border-slate-700/80 rounded-2xl p-6 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+                <div>
+                    <div class="text-xs uppercase tracking-widest text-slate-400 font-semibold mb-1">Điểm Số GPU (Score)</div>
+                    <div id="res-score" class="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400 font-mono">0</div>
+                    <div id="res-grade-text" class="text-xs text-emerald-400 font-bold mt-1">Xuất sắc - Đáp ứng tốt đồ họa 3D Volumetric</div>
+                </div>
+
+                <!-- Rank Tier Stamp -->
+                <div id="res-rank-badge" class="w-24 h-24 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-4xl font-black text-slate-950 shadow-xl border-2 border-amber-200 transform rotate-3">
+                    S+
+                </div>
+            </div>
+
+            <!-- Detailed Breakdown Grid -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6 font-mono text-xs">
+                <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+                    <span class="text-slate-400 block text-[10px]">FPS Trung Bình</span>
+                    <span id="res-avg-fps" class="text-sm font-bold text-white">0.0</span>
+                </div>
+                <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+                    <span class="text-slate-400 block text-[10px]">1% Low FPS</span>
+                    <span id="res-low-fps" class="text-sm font-bold text-amber-400">0.0</span>
+                </div>
+                <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+                    <span class="text-slate-400 block text-[10px]">Frame Time Trung Bình</span>
+                    <span id="res-avg-ms" class="text-sm font-bold text-cyan-400">0.0 ms</span>
+                </div>
+                <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+                    <span class="text-slate-400 block text-[10px]">Max Ray Steps Test</span>
+                    <span class="text-sm font-bold text-purple-400">1024 Steps</span>
+                </div>
+                <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+                    <span class="text-slate-400 block text-[10px]">Tốc độ xử lý Voxels</span>
+                    <span id="res-voxels" class="text-sm font-bold text-emerald-400">0 MVoxels/s</span>
+                </div>
+                <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+                    <span class="text-slate-400 block text-[10px]">Độ Phân Giải Test</span>
+                    <span id="res-resolution" class="text-sm font-bold text-slate-300">1920x1080</span>
+                </div>
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="closeResultModal()" class="w-full glass-button py-3 rounded-xl font-bold text-sm text-slate-200">
+                    Đóng
+                </button>
+                <button onclick="startBenchmark()" class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold text-sm text-white transition-colors">
+                    Thử Lại
+                </button>
+            </div>
+        </div>
     </div>
 
-    <div class="control-group">
-      <label>Ray Precision (Epsilon) <span class="val" id="epsilonVal">0.0015</span></label>
-      <input type="range" id="epsilon" min="0.0005" max="0.008" step="0.0005" value="0.0015">
-    </div>
+    <!-- WebGL & Application Logic -->
+    <script>
+        // --- WebGL Shaders (GLSL 300 es) ---
+        const VS_SOURCE = `#version 300 es
+        in vec2 a_position;
+        out vec2 v_uv;
+        void main() {
+            v_uv = a_position * 0.5 + 0.5;
+            gl_Position = vec4(a_position, 0.0, 1.0);
+        }`;
 
-    <div class="control-group">
-      <label>Ambient Occlusion Steps <span class="val" id="aoStepsVal">4</span></label>
-      <input type="range" id="aoSteps" min="0" max="8" step="1" value="4">
-    </div>
+        const FS_SOURCE = `#version 300 es
+        precision highp float;
 
-    <div class="section-title">Fractal Geometry (Mandelbox/Hybrid)</div>
+        out vec4 fragColor;
+        in vec2 v_uv;
 
-    <div class="control-group">
-      <label>Fractal Scale <span class="val" id="scaleVal">2.15</span></label>
-      <input type="range" id="scale" min="1.0" max="3.5" step="0.01" value="2.15">
-    </div>
+        uniform vec2 u_resolution;
+        uniform float u_time;
+        uniform vec3 u_cameraPos;
+        uniform vec3 u_cameraTarget;
+        uniform int u_volumeType;    // 0: Noise Cloud, 1: Julia, 2: Gyroid, 3: Mandelbulb, 4: CT Scan
+        uniform int u_renderMethod;  // 0: Isosurface, 1: Absorption, 2: MIP
+        uniform int u_maxSteps;      // Raymarching steps (e.g. 128 - 1024)
+        uniform float u_density;     // Density factor
+        uniform float u_isoValue;    // Surface threshold
+        uniform bool u_shadows;      // Enable Raycast Shadows
+        uniform int u_palette;       // Color Palette ID
 
-    <div class="control-group">
-      <label>Box Folding Limit <span class="val" id="foldingLimitVal">1.00</span></label>
-      <input type="range" id="foldingLimit" min="0.2" max="2.0" step="0.05" value="1.0">
-    </div>
+        #define PI 3.14159265359
 
-    <div class="control-group">
-      <label>Min Radius² <span class="val" id="minRad2Val">0.25</span></label>
-      <input type="range" id="minRad2" min="0.01" max="1.0" step="0.01" value="0.25">
-    </div>
+        // --- Simplex Noise 3D Helper ---
+        vec4 permute(vec4 x) { return mod(((x*34.0)+1.0)*x, 289.0); }
+        vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
 
-    <div class="control-group">
-      <label>Fixed Radius² <span class="val" id="fixedRad2Val">1.00</span></label>
-      <input type="range" id="fixedRad2" min="0.5" max="3.0" step="0.05" value="1.0">
-    </div>
+        float snoise(vec3 v) {
+            const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+            const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
 
-    <div class="control-group">
-      <label>Fractal Iterations <span class="val" id="fractalIterVal">14</span></label>
-      <input type="range" id="fractalIter" min="4" max="24" step="1" value="14">
-    </div>
+            vec3 i  = floor(v + dot(v, C.yyy));
+            vec3 x0 = v - i + dot(i, C.xxx);
 
-    <div class="section-title">Lighting & Palette</div>
+            vec3 g = step(x0.yzx, x0.xyz);
+            vec3 l = 1.0 - g;
+            vec3 i1 = min(g.xyz, l.zxy);
+            vec3 i2 = max(g.xyz, l.zxy);
 
-    <div class="control-group">
-      <label>Color Palette</label>
-      <select id="paletteSelect">
-        <option value="0">Rainbow Spectrum (Original)</option>
-        <option value="1">Deep Coral & Neon Blue</option>
-        <option value="2">Cyberpunk Gold & Violet</option>
-        <option value="3">Thermal Infra-Red</option>
-        <option value="4">Emerald Glow</option>
-      </select>
-    </div>
+            vec3 x1 = x0 - i1 + C.xxx;
+            vec3 x2 = x0 - i2 + C.yyy;
+            vec3 x3 = x0 - D.yyy;
 
-    <div class="control-group">
-      <label>Color Frequency <span class="val" id="colorFreqVal">3.2</span></label>
-      <input type="range" id="colorFreq" min="0.5" max="8.0" step="0.1" value="3.2">
-    </div>
+            i = mod(i, 289.0);
+            vec4 p = permute(permute(permute(
+                        i.z + vec4(0.0, i1.z, i2.z, 1.0))
+                    + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+                    + i.x + vec4(0.0, i1.x, i2.x, 1.0));
 
-    <div class="control-group">
-      <label>Glow Strength <span class="val" id="glowVal">0.65</span></label>
-      <input type="range" id="glow" min="0.0" max="2.0" step="0.05" value="0.65">
-    </div>
+            float n_ = 0.142857142857;
+            vec3 ns = n_ * D.wyz - D.xzx;
 
-    <div class="control-group">
-      <label>Shadow Softness <span class="val" id="shadowVal">8.0</span></label>
-      <input type="range" id="shadow" min="0.0" max="20.0" step="1.0" value="8.0">
-    </div>
+            vec4 j = p - 49.0 * floor(p * ns.z);
 
-    <div class="btn-row">
-      <button class="action-btn" id="resetCam">Reset Camera</button>
-      <button class="action-btn" id="toggleAutoRotate">Toggle Rotation</button>
-    </div>
-  </div>
+            vec4 x_ = floor(j * ns.z);
+            vec4 y_ = floor(j - 7.0 * x_);
 
-  <!-- Vertex Shader -->
-  <script id="vs" type="x-shader/x-vertex">#version 300 es
-    in vec2 a_position;
-    out vec2 v_uv;
-    void main() {
-      v_uv = a_position * 0.5 + 0.5;
-      gl_Position = vec4(a_position, 0.0, 1.0);
-    }
-  </script>
+            vec4 x = x_ *ns.x + ns.yyyy;
+            vec4 y = y_ *ns.x + ns.yyyy;
+            vec4 h = 1.0 - abs(x) - abs(y);
 
-  <!-- Fragment Shader: Raymarching Mandelbox/Hybrid Fractal -->
-  <script id="fs" type="x-shader/x-fragment">#version 300 es
-    precision highp float;
+            vec4 b0 = vec4(x.xy, y.xy);
+            vec4 b1 = vec4(x.zw, y.zw);
 
-    in vec2 v_uv;
-    out vec4 fragColor;
+            vec4 s0 = floor(b0)*2.0 + 1.0;
+            vec4 s1 = floor(b1)*2.0 + 1.0;
+            vec4 sh = -step(h, vec4(0.0));
 
-    uniform vec2 u_resolution;
-    uniform vec3 u_camPos;
-    uniform vec3 u_camTarget;
-    uniform float u_time;
-    
-    // Fractal Uniforms
-    uniform float u_scale;
-    uniform float u_foldingLimit;
-    uniform float u_minRad2;
-    uniform float u_fixedRad2;
-    uniform int u_fractalIter;
+            vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+            vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
 
-    // Quality/Performance Uniforms
-    uniform int u_maxSteps;
-    uniform float u_epsilon;
-    uniform int u_aoSteps;
-    uniform float u_shadowSoftness;
+            vec3 p0 = vec3(a0.xy, h.x);
+            vec3 p1 = vec3(a0.zw, h.y);
+            vec3 p2 = vec3(a1.xy, h.z);
+            vec3 p3 = vec3(a1.zw, h.w);
 
-    // Coloring Uniforms
-    uniform int u_palette;
-    uniform float u_colorFreq;
-    uniform float u_glow;
+            vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+            p0 *= norm.x;
+            p1 *= norm.y;
+            p2 *= norm.z;
+            p3 *= norm.w;
 
-    #define MAX_DIST 40.0
-
-    // Palette generator functions (Inigo Quilez cosine palettes)
-    vec3 palette( in float t, in vec3 a, in vec3 b, in vec3 c, in vec3 d ) {
-        return a + b*cos( 6.28318*(c*t+d) );
-    }
-
-    vec3 getColor(float orbit, float dist, float stepsRatio) {
-        float t = orbit * u_colorFreq + u_time * 0.05;
-        vec3 col = vec3(0.0);
-
-        if (u_palette == 0) {
-            // Rainbow Spectrum (Spectral Rainbow matching original screenshot)
-            col = palette(t, vec3(0.5,0.5,0.5), vec3(0.5,0.5,0.5), vec3(1.0,1.0,1.0), vec3(0.0,0.33,0.67));
-        } else if (u_palette == 1) {
-            // Coral Neon
-            col = palette(t, vec3(0.8,0.5,0.4), vec3(0.2,0.4,0.2), vec3(2.0,1.0,1.0), vec3(0.0,0.25,0.25));
-        } else if (u_palette == 2) {
-            // Cyberpunk Gold/Violet
-            col = palette(t, vec3(0.5,0.5,0.5), vec3(0.5,0.5,0.5), vec3(1.0,1.0,0.5), vec3(0.8,0.9,0.3));
-        } else if (u_palette == 3) {
-            // Thermal
-            col = palette(t, vec3(0.5,0.5,0.5), vec3(0.5,0.5,0.5), vec3(1.0,1.0,1.0), vec3(0.0,0.1,0.2));
-        } else {
-            // Emerald
-            col = palette(t, vec3(0.1,0.5,0.3), vec3(0.2,0.5,0.2), vec3(0.5,1.0,0.5), vec3(0.3,0.2,0.8));
+            vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+            m = m * m;
+            return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
         }
 
-        return col;
-    }
+        // Fractal Brownian Motion
+        float fbm(vec3 p) {
+            float val = 0.0;
+            float amp = 0.5;
+            vec3 q = p;
+            for(int i = 0; i < 4; i++) {
+                val += amp * snoise(q);
+                q *= 2.02;
+                amp *= 0.5;
+            }
+            return val;
+        }
 
-    // Distance Estimator for Mandelbox Fractal
-    float mapDE(vec3 pos, out float orbitTrap) {
-        vec4 p = vec4(pos, 1.0);
-        vec4 p0 = p;
-        
-        float minR2 = u_minRad2;
-        float fixedR2 = u_fixedRad2;
-        float factor = fixedR2 / minR2;
+        // --- Volumetric Scalar Fields ---
+        float mapVolume(vec3 p) {
+            // Transform p to bounding cube [-1.2, 1.2]
+            if (abs(p.x) > 1.3 || abs(p.y) > 1.3 || abs(p.z) > 1.3) return 0.0;
 
-        float trap = 1e10;
+            if (u_volumeType == 0) {
+                // Volumetric Noise Cloud
+                float d = length(p) - 1.0;
+                float n = fbm(p * 2.0 + vec3(u_time * 0.2));
+                return clamp((-d + n * 0.8) * u_density, 0.0, 2.0);
+            } 
+            else if (u_volumeType == 1) {
+                // Quaternion Julia Set Fractal Slicing
+                vec4 q = vec4(p, sin(u_time * 0.3) * 0.3);
+                vec4 c = vec4(-0.2, 0.6, 0.2, 0.2);
+                for (int i = 0; i < 6; i++) {
+                    q = vec4(
+                        q.x*q.x - q.y*q.y - q.z*q.z - q.w*q.w,
+                        2.0*q.x*q.y,
+                        2.0*q.x*q.z,
+                        2.0*q.x*q.w
+                    ) + c;
+                }
+                return clamp((1.5 - length(q)) * u_density, 0.0, 2.0);
+            }
+            else if (u_volumeType == 2) {
+                // Gyroid Surface Field
+                vec3 g = p * 4.0;
+                float gyroid = abs(sin(g.x)*cos(g.y) + sin(g.y)*cos(g.z) + sin(g.z)*cos(g.x));
+                float sphere = length(p) - 1.1;
+                float val = (0.4 - gyroid) * 2.0;
+                return clamp(max(-sphere, val) * u_density, 0.0, 2.0);
+            }
+            else if (u_volumeType == 3) {
+                // Mandelbulb 3D Field
+                vec3 w = p;
+                float m = dot(w,w);
+                float dz = 1.0;
+                for (int i = 0; i < 4; i++) {
+                    dz = 8.0*pow(m, 3.5)*dz + 1.0;
+                    float r = length(w);
+                    float b = 8.0*acos(clamp(w.z/r, -1.0, 1.0));
+                    float a = 8.0*atan(w.y, w.x);
+                    w = p + pow(r, 8.0)*vec3(sin(b)*cos(a), sin(b)*sin(a), cos(b));
+                    m = dot(w,w);
+                    if (m > 4.0) break;
+                }
+                return clamp((0.25*log(m)*sqrt(m)/dz) * u_density * 5.0, 0.0, 2.0);
+            }
+            else {
+                // Simulated Medical CT Scan (Head/Brain Structure)
+                float r = length(p);
+                if (r > 1.1) return 0.0;
+                // Outer Skull Shell
+                float skull = smoothstep(1.0, 0.9, r) - smoothstep(0.88, 0.82, r);
+                // Brain Tissue & Cavities
+                float brain = fbm(p * 5.0) * (1.0 - smoothstep(0.0, 0.85, r));
+                float val = skull * 1.8 + brain * 1.2;
+                return clamp(val * u_density, 0.0, 2.0);
+            }
+        }
 
-        for (int i = 0; i < 24; i++) {
-            if (i >= u_fractalIter) break;
+        // Normal computation via central gradient
+        vec3 computeNormal(vec3 p) {
+            float e = 0.01;
+            return normalize(vec3(
+                mapVolume(p + vec3(e,0,0)) - mapVolume(p - vec3(e,0,0)),
+                mapVolume(p + vec3(0,e,0)) - mapVolume(p - vec3(0,e,0)),
+                mapVolume(p + vec3(0,0,e)) - mapVolume(p - vec3(0,0,e))
+            ));
+        }
 
-            // Box Fold
-            p.xyz = clamp(p.xyz, -u_foldingLimit, u_foldingLimit) * 2.0 - p.xyz;
+        // Color Palettes
+        vec3 getPalette(float t) {
+            t = clamp(t, 0.0, 1.0);
+            if (u_palette == 0) { // Flame / Fire
+                return mix(vec3(0.05, 0.0, 0.1), mix(vec3(1.0, 0.2, 0.0), vec3(1.0, 0.9, 0.3), t), sqrt(t));
+            } else if (u_palette == 1) { // Ocean / Aqua
+                return mix(vec3(0.0, 0.05, 0.2), mix(vec3(0.0, 0.6, 0.8), vec3(0.8, 1.0, 0.9), t), t);
+            } else if (u_palette == 2) { // Cyberpunk Neon
+                return mix(vec3(0.1, 0.0, 0.2), mix(vec3(0.9, 0.0, 0.6), vec3(0.0, 0.9, 1.0), t), t);
+            } else { // X-Ray Medical
+                return vec3(t * 0.7, t * 0.85, t);
+            }
+        }
 
-            // Sphere Fold
-            float r2 = dot(p.xyz, p.xyz);
-            trap = min(trap, r2);
+        // Ray-AABB Box Intersection Test
+        bool intersectBox(vec3 ro, vec3 rd, vec3 boxMin, vec3 boxMax, out float tNear, out float tFar) {
+            vec3 invR = 1.0 / rd;
+            vec3 tbot = invR * (boxMin - ro);
+            vec3 ttop = invR * (boxMax - ro);
+            vec3 tmin = min(ttop, tbot);
+            vec3 tmax = max(ttop, tbot);
+            tNear = max(max(tmin.x, tmin.y), tmin.z);
+            tFar = min(min(tmax.x, tmax.y), tmax.z);
+            return tNear <= tFar && tFar > 0.0;
+        }
 
-            if (r2 < minR2) {
-                p *= factor;
-            } else if (r2 < fixedR2) {
-                p *= fixedR2 / r2;
+        void main() {
+            vec2 st = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
+
+            // Camera Setup
+            vec3 ro = u_cameraPos;
+            vec3 target = u_cameraTarget;
+            vec3 ww = normalize(target - ro);
+            vec3 uu = normalize(cross(ww, vec3(0.0, 1.0, 0.0)));
+            vec3 vv = normalize(cross(uu, ww));
+            vec3 rd = normalize(st.x * uu + st.y * vv + 1.5 * ww);
+
+            // Volume Bounding Box [-1.2, 1.2]^3
+            float tNear, tFar;
+            bool hit = intersectBox(ro, rd, vec3(-1.2), vec3(1.2), tNear, tFar);
+
+            if (!hit) {
+                fragColor = vec4(0.02, 0.03, 0.06, 1.0); // Background color
+                return;
             }
 
-            // Scale and Translate
-            p = p * u_scale + p0;
-        }
+            tNear = max(tNear, 0.0);
+            float stepSize = (tFar - tNear) / float(u_maxSteps);
+            vec3 lightDir = normalize(vec3(1.5, 2.0, -1.0));
 
-        orbitTrap = trap;
-        return (length(p.xyz) - 0.01) / p.w;
-    }
+            vec3 accumulatedColor = vec3(0.0);
+            float accumulatedAlpha = 0.0;
+            float maxVal = 0.0;
 
-    // Simplified DE for fast shadow / AO queries
-    float mapDE_fast(vec3 pos) {
-        float dummy;
-        return mapDE(pos, dummy);
-    }
+            // Raymarching Loop
+            float t = tNear;
+            for (int i = 0; i < u_maxSteps; i++) {
+                if (t > tFar || accumulatedAlpha >= 0.98) break;
 
-    // Normal calculation via tetrahedron gradient
-    vec3 calcNormal(vec3 p) {
-        float dummy;
-        float h = u_epsilon;
-        vec2 k = vec2(1.0, -1.0);
-        return normalize(
-            k.xyy * mapDE(p + k.xyy * h, dummy) +
-            k.yyx * mapDE(p + k.yyx * h, dummy) +
-            k.yxy * mapDE(p + k.yxy * h, dummy) +
-            k.xxx * mapDE(p + k.xxx * h, dummy)
-        );
-    }
+                vec3 p = ro + rd * t;
+                float val = mapVolume(p);
 
-    // Screen Space Ambient Occlusion
-    float calcAO(vec3 pos, vec3 nor) {
-        if (u_aoSteps == 0) return 1.0;
-        float occ = 0.0;
-        float sca = 1.0;
-        for (int i = 0; i < 8; i++) {
-            if (i >= u_aoSteps) break;
-            float h = 0.01 + 0.05 * float(i);
-            float d = mapDE_fast(pos + h * nor);
-            occ += (h - d) * sca;
-            sca *= 0.85;
-            if (occ > 0.35) break;
-        }
-        return clamp(1.0 - 2.5 * occ, 0.0, 1.0);
-    }
+                if (u_renderMethod == 0) { 
+                    // --- Isosurface Raymarching ---
+                    if (val > u_isoValue * 0.5) {
+                        vec3 N = computeNormal(p);
+                        float diff = max(dot(N, lightDir), 0.15);
+                        
+                        // Shadow Ray
+                        float shadow = 1.0;
+                        if (u_shadows) {
+                            float stNear, stFar;
+                            if (intersectBox(p + N * 0.02, lightDir, vec3(-1.2), vec3(1.2), stNear, stFar)) {
+                                float sVal = mapVolume(p + lightDir * 0.1);
+                                shadow = clamp(1.0 - sVal, 0.3, 1.0);
+                            }
+                        }
 
-    // Soft Shadow calculation
-    float calcSoftShadow(vec3 ro, vec3 rd, float mint, float maxt, float k) {
-        if (k <= 0.1) return 1.0;
-        float res = 1.0;
-        float t = mint;
-        for (int i = 0; i < 24; i++) {
-            float h = mapDE_fast(ro + rd * t);
-            res = min(res, k * h / t);
-            t += clamp(h, 0.01, 0.2);
-            if (res < 0.005 || t > maxt) break;
-        }
-        return clamp(res, 0.0, 1.0);
-    }
+                        vec3 col = getPalette(val) * diff * shadow;
+                        accumulatedColor = col;
+                        accumulatedAlpha = 1.0;
+                        break;
+                    }
+                } 
+                else if (u_renderMethod == 1) { 
+                    // --- Emission / Absorption (Alpha Compositing) ---
+                    if (val > 0.02) {
+                        float alphaStep = val * stepSize * 2.5;
+                        vec3 colStep = getPalette(val);
+                        accumulatedColor += (1.0 - accumulatedAlpha) * colStep * alphaStep;
+                        accumulatedAlpha += (1.0 - accumulatedAlpha) * alphaStep;
+                    }
+                } 
+                else { 
+                    // --- Maximum Intensity Projection (MIP) ---
+                    if (val > maxVal) {
+                        maxVal = val;
+                    }
+                }
 
-    // Raymarching camera setup matrix
-    mat3 setCamera(vec3 ro, vec3 ta, float cr) {
-        vec3 cw = normalize(ta - ro);
-        vec3 cp = vec3(sin(cr), cos(cr), 0.0);
-        vec3 cu = normalize(cross(cw, cp));
-        vec3 cv = normalize(cross(cu, cw));
-        return mat3(cu, cv, cw);
-    }
-
-    void main() {
-        vec2 p = (2.0 * gl_FragCoord.xy - u_resolution.xy) / u_resolution.y;
-
-        // Camera setup
-        mat3 ca = setCamera(u_camPos, u_camTarget, 0.0);
-        vec3 rd = ca * normalize(vec3(p, 2.2)); // FOV scaling
-
-        // Raymarching Loop
-        float t = 0.05;
-        float orbitTrap = 0.0;
-        float minDistance = 1000.0;
-        int stepsUsed = 0;
-        bool hit = false;
-
-        for (int i = 0; i < u_maxSteps; i++) {
-            stepsUsed = i;
-            vec3 pos = u_camPos + rd * t;
-            float d = mapDE(pos, orbitTrap);
-            minDistance = min(minDistance, d);
-
-            if (d < u_epsilon) {
-                hit = true;
-                break;
+                t += stepSize;
             }
-            if (t > MAX_DIST) break;
-            
-            // Dynamic step scaling for fast performance & crisp detail
-            t += d * 0.85;
-        }
 
-        vec3 color = vec3(0.0);
+            if (u_renderMethod == 2) {
+                accumulatedColor = getPalette(maxVal);
+                accumulatedAlpha = clamp(maxVal * 2.0, 0.0, 1.0);
+            }
 
-        if (hit) {
-            vec3 pos = u_camPos + rd * t;
-            vec3 nor = calcNormal(pos);
+            // Blend with dark background
+            vec3 bgColor = vec3(0.02, 0.03, 0.06);
+            vec3 finalColor = mix(bgColor, accumulatedColor, accumulatedAlpha);
 
-            // Lighting setup
-            vec3 light1 = normalize(vec3(1.2, 1.5, 1.0));
-            vec3 light2 = normalize(vec3(-1.0, -0.8, -1.2));
+            fragColor = vec4(finalColor, 1.0);
+        }`;
 
-            // Diffuse & Specular
-            float dif1 = max(dot(nor, light1), 0.0);
-            float dif2 = max(dot(nor, light2), 0.0) * 0.3;
-            
-            vec3 ref = reflect(rd, nor);
-            float spec = pow(max(dot(ref, light1), 0.0), 16.0);
+        // --- Application State ---
+        let canvas, gl, program;
+        let locations = {};
+        let miniChart;
 
-            // Ambient Occlusion & Shadow
-            float ao = calcAO(pos, nor);
-            float shadow = calcSoftShadow(pos + nor * u_epsilon * 2.0, light1, 0.02, 3.0, u_shadowSoftness);
+        // Render Parameters
+        let config = {
+            volumeType: 0,
+            renderMethod: 0,
+            maxSteps: 256,
+            scale: 1.0,
+            density: 1.0,
+            shadows: true,
+            palette: 0
+        };
 
-            // Base Fractal Palette Color
-            float stepsRatio = float(stepsUsed) / float(u_maxSteps);
-            vec3 baseColor = getColor(orbitTrap, t, stepsRatio);
+        // Camera Orbit Controls
+        let camera = {
+            radius: 3.2,
+            theta: 0.6,
+            phi: 0.4,
+            target: [0, 0, 0],
+            isDragging: false,
+            lastX: 0,
+            lastY: 0
+        };
 
-            // Composite Lighting
-            vec3 ambient = vec3(0.08, 0.09, 0.12) * baseColor;
-            vec3 diffuse = baseColor * (dif1 * shadow + dif2) * 1.1;
-            vec3 specular = vec3(1.0) * spec * shadow * 0.6;
+        // Performance Telemetry
+        let frameTimes = [];
+        let lastFrameTime = performance.now();
+        let fps = 0, ms = 0;
+        let isBenchmarking = false;
 
-            color = (ambient + diffuse) * ao + specular;
-
-            // Distance fog depth fade
-            color = mix(color, vec3(0.0), 1.0 - exp(-0.0015 * t * t));
-        } else {
-            // Background volumetric glow around edge bounds
-            float glowAmount = pow(clamp(0.008 / (minDistance + 0.0001), 0.0, 1.0), 1.2);
-            color = vec3(0.2, 0.5, 0.9) * glowAmount * u_glow * 3.0;
-        }
-
-        // Post-processing: Gamma correction and mild vignette
-        color = pow(color, vec3(0.4545));
-        vec2 q = v_uv;
-        color *= 0.5 + 0.5 * pow(16.0 * q.x * q.y * (1.0 - q.x) * (1.0 - q.y), 0.25);
-
-        fragColor = vec4(color, 1.0);
-    }
-  </script>
-
-  <!-- Main JavaScript Engine -->
-  <script>
-    window.addEventListener('DOMContentLoaded', () => {
-      const canvas = document.getElementById('glcanvas');
-      const gl = canvas.getContext('webgl2', { antialias: false, powerPreference: 'high-performance' });
-
-      if (!gl) {
-        alert('WebGL 2 is not supported by your browser or hardware.');
-        return;
-      }
-
-      // Compile Shader Helper
-      function createShader(gl, type, source) {
-        const shader = gl.createShader(type);
-        gl.shaderSource(shader, source.trim());
-        gl.compileShader(shader);
-        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-          console.error('Shader compile error:', gl.getShaderInfoLog(shader));
-          gl.deleteShader(shader);
-          return null;
-        }
-        return shader;
-      }
-
-      const vsSource = document.getElementById('vs').text;
-      const fsSource = document.getElementById('fs').text;
-      const vs = createShader(gl, gl.VERTEX_SHADER, vsSource);
-      const fs = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
-
-      const program = gl.createProgram();
-      gl.attachShader(program, vs);
-      gl.attachShader(program, fs);
-      gl.linkProgram(program);
-
-      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        console.error('Program link error:', gl.getProgramInfoLog(program));
-        return;
-      }
-
-      // Fullscreen quad buffer
-      const quadBuffer = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-        -1, -1,
-         1, -1,
-        -1,  1,
-        -1,  1,
-         1, -1,
-         1,  1,
-      ]), gl.STATIC_DRAW);
-
-      const vao = gl.createVertexArray();
-      gl.bindVertexArray(vao);
-      const posLoc = gl.getAttribLocation(program, 'a_position');
-      gl.enableVertexAttribArray(posLoc);
-      gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
-
-      // Uniform Locations
-      const uLoc = {
-        resolution: gl.getUniformLocation(program, 'u_resolution'),
-        camPos: gl.getUniformLocation(program, 'u_camPos'),
-        camTarget: gl.getUniformLocation(program, 'u_camTarget'),
-        time: gl.getUniformLocation(program, 'u_time'),
-        scale: gl.getUniformLocation(program, 'u_scale'),
-        foldingLimit: gl.getUniformLocation(program, 'u_foldingLimit'),
-        minRad2: gl.getUniformLocation(program, 'u_minRad2'),
-        fixedRad2: gl.getUniformLocation(program, 'u_fixedRad2'),
-        fractalIter: gl.getUniformLocation(program, 'u_fractalIter'),
-        maxSteps: gl.getUniformLocation(program, 'u_maxSteps'),
-        epsilon: gl.getUniformLocation(program, 'u_epsilon'),
-        aoSteps: gl.getUniformLocation(program, 'u_aoSteps'),
-        shadowSoftness: gl.getUniformLocation(program, 'u_shadowSoftness'),
-        palette: gl.getUniformLocation(program, 'u_palette'),
-        colorFreq: gl.getUniformLocation(program, 'u_colorFreq'),
-        glow: gl.getUniformLocation(program, 'u_glow'),
-      };
-
-      // Interactive Camera Parameters
-      let camera = {
-        radius: 3.8,
-        theta: 0.8,
-        phi: 0.6,
-        target: [0.0, 0.0, 0.0],
-        autoRotate: true,
-        rotateSpeed: 0.003
-      };
-
-      // App Settings
-      const settings = {
-        renderScale: 1.0,
-        maxSteps: 128,
-        epsilon: 0.0015,
-        aoSteps: 4,
-        scale: 2.15,
-        foldingLimit: 1.0,
-        minRad2: 0.25,
-        fixedRad2: 1.0,
-        fractalIter: 14,
-        palette: 0,
-        colorFreq: 3.2,
-        glow: 0.65,
-        shadowSoftness: 8.0,
-      };
-
-      // Resize canvas based on pixel ratio & render scale
-      let width = 0, height = 0;
-      function resize() {
-        const displayWidth = Math.floor(window.innerWidth * settings.renderScale);
-        const displayHeight = Math.floor(window.innerHeight * settings.renderScale);
-
-        if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
-          canvas.width = displayWidth;
-          canvas.height = displayHeight;
-          width = displayWidth;
-          height = displayHeight;
-        }
-      }
-      window.addEventListener('resize', resize);
-      resize();
-
-      // Mouse & Touch Controls
-      let isDragging = false;
-      let lastMouseX = 0, lastMouseY = 0;
-
-      canvas.addEventListener('mousedown', (e) => {
-        if (e.button === 0) { // Left mouse
-          isDragging = true;
-          lastMouseX = e.clientX;
-          lastMouseY = e.clientY;
-        }
-      });
-
-      window.addEventListener('mouseup', () => {
-        isDragging = false;
-      });
-
-      window.addEventListener('mousemove', (e) => {
-        if (isDragging) {
-          const dx = e.clientX - lastMouseX;
-          const dy = e.clientY - lastMouseY;
-          lastMouseX = e.clientX;
-          lastMouseY = e.clientY;
-
-          camera.theta -= dx * 0.005;
-          camera.phi = Math.max(0.01, Math.min(Math.PI - 0.01, camera.phi - dy * 0.005));
-        }
-      });
-
-      // Zoom via wheel
-      canvas.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        camera.radius = Math.max(1.2, Math.min(15.0, camera.radius + e.deltaY * 0.003));
-      }, { passive: false });
-
-      // Touch controls
-      canvas.addEventListener('touchstart', (e) => {
-        if (e.touches.length === 1) {
-          isDragging = true;
-          lastMouseX = e.touches[0].clientX;
-          lastMouseY = e.touches[0].clientY;
-        }
-      });
-      canvas.addEventListener('touchend', () => { isDragging = false; });
-      canvas.addEventListener('touchmove', (e) => {
-        if (isDragging && e.touches.length === 1) {
-          const dx = e.touches[0].clientX - lastMouseX;
-          const dy = e.touches[0].clientY - lastMouseY;
-          lastMouseX = e.touches[0].clientX;
-          lastMouseY = e.touches[0].clientY;
-
-          camera.theta -= dx * 0.005;
-          camera.phi = Math.max(0.01, Math.min(Math.PI - 0.01, camera.phi - dy * 0.005));
-        }
-      });
-
-      // UI Controls Binding
-      const configToggle = document.getElementById('configToggle');
-      const controlPanel = document.getElementById('controlPanel');
-      configToggle.addEventListener('click', () => {
-        controlPanel.classList.toggle('hidden');
-      });
-
-      function bindSlider(id, key, valDisplayId, transform = v => v) {
-        const input = document.getElementById(id);
-        const display = document.getElementById(valDisplayId);
-        input.addEventListener('input', (e) => {
-          const val = parseFloat(e.target.value);
-          settings[key] = val;
-          display.textContent = transform(val);
-          if (key === 'renderScale') resize();
+        // Khởi tạo ứng dụng khi load xong DOM
+        window.addEventListener('DOMContentLoaded', () => {
+            initWebGL();
+            initChart();
+            setupInteractions();
+            detectGPU();
+            requestAnimationFrame(renderLoop);
         });
-      }
 
-      bindSlider('renderScale', 'renderScale', 'renderScaleVal', v => `${v.toFixed(2)}x`);
-      bindSlider('maxSteps', 'maxSteps', 'maxStepsVal', v => {
-        document.getElementById('stepsVal').textContent = v;
-        return v;
-      });
-      bindSlider('epsilon', 'epsilon', 'epsilonVal', v => v.toFixed(4));
-      bindSlider('aoSteps', 'aoSteps', 'aoStepsVal', v => v);
-      bindSlider('scale', 'scale', 'scaleVal', v => v.toFixed(2));
-      bindSlider('foldingLimit', 'foldingLimit', 'foldingLimitVal', v => v.toFixed(2));
-      bindSlider('minRad2', 'minRad2', 'minRad2Val', v => v.toFixed(2));
-      bindSlider('fixedRad2', 'fixedRad2', 'fixedRad2Val', v => v.toFixed(2));
-      bindSlider('fractalIter', 'fractalIter', 'fractalIterVal', v => v);
-      bindSlider('colorFreq', 'colorFreq', 'colorFreqVal', v => v.toFixed(1));
-      bindSlider('glow', 'glow', 'glowVal', v => v.toFixed(2));
-      bindSlider('shadow', 'shadowSoftness', 'shadowVal', v => v.toFixed(1));
+        // 1. Khởi tạo WebGL 2 Context & Shaders
+        function initWebGL() {
+            canvas = document.getElementById('glCanvas');
+            gl = canvas.getContext('webgl2', { powerPreference: "high-performance", antialias: false });
 
-      document.getElementById('paletteSelect').addEventListener('change', (e) => {
-        settings.palette = parseInt(e.target.value);
-      });
+            if (!gl) {
+                alert('Rất tiếc! Trình duyệt hoặc GPU của bạn không hỗ trợ WebGL 2.');
+                return;
+            }
 
-      document.getElementById('resetCam').addEventListener('click', () => {
-        camera.radius = 3.8;
-        camera.theta = 0.8;
-        camera.phi = 0.6;
-        camera.target = [0, 0, 0];
-      });
+            // Tạo & Compile Shaders
+            const vs = createShader(gl, gl.VERTEX_SHADER, VS_SOURCE);
+            const fs = createShader(gl, gl.FRAGMENT_SHADER, FS_SOURCE);
+            program = gl.createProgram();
+            gl.attachShader(program, vs);
+            gl.attachShader(program, fs);
+            gl.linkProgram(program);
 
-      document.getElementById('toggleAutoRotate').addEventListener('click', () => {
-        camera.autoRotate = !camera.autoRotate;
-      });
+            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                console.error(gl.getProgramInfoLog(program));
+                return;
+            }
 
-      // FPS Counter
-      let frameCount = 0;
-      let lastTime = performance.now();
-      const fpsDisplay = document.getElementById('fpsVal');
+            // Fullscreen Quad Geometry
+            const positionBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+                -1, -1,  1, -1, -1,  1,
+                -1,  1,  1, -1,  1,  1,
+            ]), gl.STATIC_DRAW);
 
-      // Main Render Loop
-      function render(now) {
-        now *= 0.001; // Seconds
+            const vao = gl.createVertexArray();
+            gl.bindVertexArray(vao);
+            const posLoc = gl.getAttribLocation(program, 'a_position');
+            gl.enableVertexAttribArray(posLoc);
+            gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
 
-        // Calculate FPS
-        frameCount++;
-        const currentTime = performance.now();
-        if (currentTime - lastTime >= 500) {
-          fpsDisplay.textContent = Math.round((frameCount * 1000) / (currentTime - lastTime));
-          frameCount = 0;
-          lastTime = currentTime;
+            // Get Uniform Locations
+            gl.useProgram(program);
+            const uniformNames = [
+                'u_resolution', 'u_time', 'u_cameraPos', 'u_cameraTarget',
+                'u_volumeType', 'u_renderMethod', 'u_maxSteps', 'u_density',
+                'u_isoValue', 'u_shadows', 'u_palette'
+            ];
+            uniformNames.forEach(name => {
+                locations[name] = gl.getUniformLocation(program, name);
+            });
+
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
         }
 
-        // Camera auto rotation
-        if (camera.autoRotate && !isDragging) {
-          camera.theta += camera.rotateSpeed;
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error(gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
         }
 
-        // Spherical to Cartesian Camera Position
-        const cx = camera.radius * Math.sin(camera.phi) * Math.cos(camera.theta);
-        const cy = camera.radius * Math.cos(camera.phi);
-        const cz = camera.radius * Math.sin(camera.phi) * Math.sin(camera.theta);
+        function resizeCanvas() {
+            const width = Math.floor(window.innerWidth * config.scale);
+            const height = Math.floor(window.innerHeight * config.scale);
+            if (canvas.width !== width || canvas.height !== height) {
+                canvas.width = width;
+                canvas.height = height;
+                gl.viewport(0, 0, width, height);
+            }
+        }
 
-        gl.viewport(0, 0, width, height);
-        gl.useProgram(program);
+        // 2. Nhận diện tên Card Đồ Họa (GPU)
+        function detectGPU() {
+            const gpuLabel = document.getElementById('gpu-info');
+            try {
+                const ext = gl.getExtension('WEBGL_debug_renderer_info');
+                if (ext) {
+                    const renderer = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL);
+                    gpuLabel.innerText = renderer;
+                    return;
+                }
+            } catch (e) {}
+            gpuLabel.innerText = gl.getParameter(gl.RENDERER) || "Generic GPU Device";
+        }
 
-        // Upload Uniforms
-        gl.uniform2f(uLoc.resolution, width, height);
-        gl.uniform3f(uLoc.camPos, cx, cy, cz);
-        gl.uniform3f(uLoc.camTarget, camera.target[0], camera.target[1], camera.target[2]);
-        gl.uniform1f(uLoc.time, now);
+        // 3. Vòng Lặp Render Chính (Render Loop)
+        function renderLoop(now) {
+            // Frame Time Calculation
+            const delta = now - lastFrameTime;
+            lastFrameTime = now;
+            ms = delta;
+            fps = 1000 / Math.max(delta, 1);
 
-        gl.uniform1f(uLoc.scale, settings.scale);
-        gl.uniform1f(uLoc.foldingLimit, settings.foldingLimit);
-        gl.uniform1f(uLoc.minRad2, settings.minRad2);
-        gl.uniform1f(uLoc.fixedRad2, settings.fixedRad2);
-        gl.uniform1i(uLoc.fractalIter, settings.fractalIter);
+            // Cập nhật giao diện Telemetry
+            document.getElementById('fps-val').innerText = fps.toFixed(1);
+            document.getElementById('ms-val').innerText = ms.toFixed(1) + ' ms';
 
-        gl.uniform1i(uLoc.maxSteps, settings.maxSteps);
-        gl.uniform1f(uLoc.epsilon, settings.epsilon);
-        gl.uniform1i(uLoc.aoSteps, settings.aoSteps);
-        gl.uniform1f(uLoc.shadowSoftness, settings.shadowSoftness);
+            // Lưu dữ liệu vào Mini Chart
+            frameTimes.push(ms);
+            if (frameTimes.length > 40) frameTimes.shift();
+            updateMiniChart();
 
-        gl.uniform1i(uLoc.palette, settings.palette);
-        gl.uniform1f(uLoc.colorFreq, settings.colorFreq);
-        gl.uniform1f(uLoc.glow, settings.glow);
+            // Nếu đang không chạy tự động benchmark thì quay camera từ từ
+            if (!camera.isDragging && !isBenchmarking) {
+                camera.theta += 0.005;
+            }
 
-        // Draw quad
-        gl.bindVertexArray(vao);
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
+            // Tính vị trí Camera trong tọa độ cầu (Spherical Coordinates)
+            const camX = camera.radius * Math.sin(camera.phi) * Math.cos(camera.theta);
+            const camY = camera.radius * Math.cos(camera.phi);
+            const camZ = camera.radius * Math.sin(camera.phi) * Math.sin(camera.theta);
 
-        requestAnimationFrame(render);
-      }
+            // Pass Uniforms vào Shader
+            gl.useProgram(program);
+            gl.uniform2f(locations.u_resolution, canvas.width, canvas.height);
+            gl.uniform1f(locations.u_time, now * 0.001);
+            gl.uniform3f(locations.u_cameraPos, camX, camY, camZ);
+            gl.uniform3f(locations.u_cameraTarget, camera.target[0], camera.target[1], camera.target[2]);
+            gl.uniform1i(locations.u_volumeType, config.volumeType);
+            gl.uniform1i(locations.u_renderMethod, config.renderMethod);
+            gl.uniform1i(locations.u_maxSteps, config.maxSteps);
+            gl.uniform1f(locations.u_density, config.density);
+            gl.uniform1f(locations.u_isoValue, 0.4);
+            gl.uniform1i(locations.u_shadows, config.shadows ? 1 : 0);
+            gl.uniform1i(locations.u_palette, config.palette);
 
-      requestAnimationFrame(render);
-    });
-  </script>
+            // Draw Fullscreen Quad
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+            requestAnimationFrame(renderLoop);
+        }
+
+        // 4. Biểu đồ Live Frame Time (Chart.js)
+        function initChart() {
+            const ctx = document.getElementById('miniChart').getContext('2d');
+            miniChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: new Array(40).fill(''),
+                    datasets: [{
+                        data: frameTimes,
+                        borderColor: '#38bdf8',
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        tension: 0.3,
+                        fill: true,
+                        backgroundColor: 'rgba(56, 189, 248, 0.1)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                    scales: {
+                        x: { display: false },
+                        y: { display: false, min: 0, max: 50 }
+                    }
+                }
+            });
+        }
+
+        function updateMiniChart() {
+            if (miniChart) {
+                miniChart.data.datasets[0].data = frameTimes;
+                miniChart.update();
+                const avgMs = (frameTimes.reduce((a, b) => a + b, 0) / (frameTimes.length || 1)).toFixed(1);
+                document.getElementById('chart-avg-ms').innerText = `Avg: ${avgMs}ms`;
+            }
+        }
+
+        // 5. Tương tác Chuột / Touch Để Xoay 3D Camera
+        function setupInteractions() {
+            canvas.addEventListener('mousedown', (e) => {
+                camera.isDragging = true;
+                camera.lastX = e.clientX;
+                camera.lastY = e.clientY;
+            });
+
+            window.addEventListener('mouseup', () => camera.isDragging = false);
+
+            canvas.addEventListener('mousemove', (e) => {
+                if (!camera.isDragging) return;
+                const dx = e.clientX - camera.lastX;
+                const dy = e.clientY - camera.lastY;
+                camera.lastX = e.clientX;
+                camera.lastY = e.clientY;
+
+                camera.theta -= dx * 0.008;
+                camera.phi = Math.max(0.1, Math.min(Math.PI - 0.1, camera.phi - dy * 0.008));
+            });
+
+            canvas.addEventListener('wheel', (e) => {
+                camera.radius = Math.max(1.5, Math.min(8.0, camera.radius + e.deltaY * 0.002));
+            });
+
+            // Touch events cho điện thoại
+            canvas.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 1) {
+                    camera.isDragging = true;
+                    camera.lastX = e.touches[0].clientX;
+                    camera.lastY = e.touches[0].clientY;
+                }
+            });
+
+            canvas.addEventListener('touchmove', (e) => {
+                if (!camera.isDragging || e.touches.length !== 1) return;
+                const dx = e.touches[0].clientX - camera.lastX;
+                const dy = e.touches[0].clientY - camera.lastY;
+                camera.lastX = e.touches[0].clientX;
+                camera.lastY = e.touches[0].clientY;
+
+                camera.theta -= dx * 0.008;
+                camera.phi = Math.max(0.1, Math.min(Math.PI - 0.1, camera.phi - dy * 0.008));
+            });
+
+            canvas.addEventListener('touchend', () => camera.isDragging = false);
+        }
+
+        // 6. Tùy chỉnh tham số Render từ UI
+        function selectVolume(id, btn) {
+            config.volumeType = id;
+            document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+
+        function selectRenderMethod(id, btn) {
+            config.renderMethod = id;
+            document.querySelectorAll('.render-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+
+        function selectPalette(id, btn) {
+            config.palette = id;
+            document.querySelectorAll('.palette-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+
+        function updateSteps(val) {
+            config.maxSteps = parseInt(val);
+            document.getElementById('steps-label').innerText = val;
+            document.getElementById('steps-val-display').innerText = val;
+        }
+
+        function updateScale(val) {
+            config.scale = parseFloat(val);
+            document.getElementById('scale-label').innerText = val + 'x';
+            resizeCanvas();
+        }
+
+        function updateDensity(val) {
+            config.density = parseFloat(val);
+            document.getElementById('density-label').innerText = val;
+        }
+
+        function toggleShadows(val) {
+            config.shadows = val;
+        }
+
+        function resetDefaults() {
+            updateSteps(256);
+            updateScale(1.0);
+            updateDensity(1.0);
+            document.getElementById('slider-steps').value = 256;
+            document.getElementById('slider-scale').value = 1.0;
+            document.getElementById('slider-density').value = 1.0;
+            document.getElementById('toggle-shadows').checked = true;
+            config.shadows = true;
+        }
+
+        function toggleMobileMenu() {
+            const sidebar = document.querySelector('aside');
+            sidebar.classList.toggle('hidden');
+            sidebar.classList.toggle('flex');
+            sidebar.classList.toggle('fixed');
+            sidebar.classList.toggle('inset-x-4');
+            sidebar.classList.toggle('bottom-20');
+            sidebar.classList.toggle('z-30');
+        }
+
+        // 7. CHƯƠNG TRÌNH ĐÁNH GIÁ GPU TỰ ĐỘNG (BENCHMARK SUITE)
+        async function startBenchmark() {
+            if (isBenchmarking) return;
+            isBenchmarking = true;
+
+            const modal = document.getElementById('bm-modal');
+            const progressBar = document.getElementById('bm-progress-bar');
+            const statusText = document.getElementById('bm-status-text');
+            const liveFps = document.getElementById('bm-live-fps');
+            const liveMs = document.getElementById('bm-live-ms');
+
+            modal.classList.remove('hidden');
+
+            // Lưu cấu hình cũ của người dùng
+            const backupConfig = { ...config };
+
+            // Danh sách 4 kịch bản kiểm tra stress test
+            const tests = [
+                { name: "Test 1/4: Simplex Noise Volume (Mức Nhẹ - 128 Steps)", type: 0, method: 1, steps: 128, shadows: false, scale: 1.0 },
+                { name: "Test 2/4: Gyroid Structure + Shadow Rays (Mức Trung Bình)", type: 2, method: 0, steps: 256, shadows: true, scale: 1.0 },
+                { name: "Test 3/4: 4D Julia Set Volume (Nặng - 512 Steps)", type: 1, method: 0, steps: 512, shadows: true, scale: 1.0 },
+                { name: "Test 4/4: Mandelbulb 3D Extreme Stress (Rất Nặng - 1024 Steps)", type: 3, method: 0, steps: 1024, shadows: true, scale: 1.0 }
+            ];
+
+            let benchmarkFpsSamples = [];
+
+            for (let i = 0; i < tests.length; i++) {
+                const t = tests[i];
+                statusText.innerText = t.name;
+                progressBar.style.width = `${((i) / tests.length) * 100}%`;
+
+                // Áp dụng cấu hình test
+                config.volumeType = t.type;
+                config.renderMethod = t.method;
+                config.maxSteps = t.steps;
+                config.shadows = t.shadows;
+                config.scale = t.scale;
+                resizeCanvas();
+
+                // Chờ GPU ổn định 500ms
+                await new Promise(r => setTimeout(r, 500));
+
+                // Thu thập mẫu FPS trong 3.5 giây cho mỗi kịch bản
+                const startTime = performance.now();
+                while (performance.now() - startTime < 3500) {
+                    benchmarkFpsSamples.push(fps);
+                    liveFps.innerText = fps.toFixed(1);
+                    liveMs.innerText = ms.toFixed(1) + ' ms';
+                    camera.theta += 0.03; // Xoay camera nhanh để force redraw
+                    await new Promise(r => setTimeout(r, 50));
+                }
+            }
+
+            progressBar.style.width = '100%';
+            statusText.innerText = "Đang tổng hợp dữ liệu & tính điểm GPU...";
+            await new Promise(r => setTimeout(r, 600));
+
+            // Khôi phục lại cấu hình ban đầu
+            config = { ...backupConfig };
+            resizeCanvas();
+            modal.classList.add('hidden');
+            isBenchmarking = false;
+
+            // Tính toán Điểm số & Xếp hạng
+            calculateResults(benchmarkFpsSamples);
+        }
+
+        function calculateResults(samples) {
+            // Loại bỏ mẫu rác đầu
+            const validSamples = samples.filter(s => s > 0);
+            if (validSamples.length === 0) return;
+
+            // Tính Avg FPS
+            const avgFps = validSamples.reduce((a, b) => a + b, 0) / validSamples.length;
+            
+            // Tính 1% Low FPS (Sort và lấy vị trí 1%)
+            const sorted = [...validSamples].sort((a, b) => a - b);
+            const low1PercentIndex = Math.floor(sorted.length * 0.01);
+            const lowFps = sorted[low1PercentIndex] || sorted[0];
+
+            const avgMs = 1000 / avgFps;
+
+            // Công thức tính điểm GPU Volume Raymarching Score
+            // Điểm dựa trên Avg FPS, 1% Low FPS và số Pixels x Max Steps
+            const rawScore = Math.round((avgFps * 45) + (lowFps * 25));
+
+            // Phân hạng Rank Tier
+            let rank = 'C';
+            let rankBg = 'from-slate-500 to-gray-700';
+            let textDesc = 'Đáp ứng đồ họa ở mức cơ bản';
+
+            if (rawScore > 4500) {
+                rank = 'S+';
+                rankBg = 'from-amber-400 to-orange-500';
+                textDesc = 'Cực kỳ mạnh mẽ! Đạt hiệu năng Raymarching xuất sắc';
+            } else if (rawScore > 3200) {
+                rank = 'S';
+                rankBg = 'from-purple-500 to-indigo-600';
+                textDesc = 'Rất mạnh! Xử lý mượt mà các shader thể tích 3D phức tạp';
+            } else if (rawScore > 2200) {
+                rank = 'A';
+                rankBg = 'from-blue-500 to-cyan-600';
+                textDesc = 'Mạnh mẽ! Đáp ứng mượt mà hầu hết các bài test';
+            } else if (rawScore > 1200) {
+                rank = 'B';
+                rankBg = 'from-emerald-500 to-teal-600';
+                textDesc = 'Khá! Vẫn hoạt động tốt ở thiết lập vừa phải';
+            }
+
+            // Tính Megavoxels/s throughput ước tính
+            const megaVoxels = Math.round((canvas.width * canvas.height * 256 * avgFps) / 1000000);
+
+            // Cập nhật lên Result Modal
+            document.getElementById('res-gpu-name').innerText = document.getElementById('gpu-info').innerText;
+            document.getElementById('res-score').innerText = rawScore.toLocaleString();
+            document.getElementById('res-grade-text').innerText = textDesc;
+            document.getElementById('res-avg-fps').innerText = avgFps.toFixed(1) + ' FPS';
+            document.getElementById('res-low-fps').innerText = lowFps.toFixed(1) + ' FPS';
+            document.getElementById('res-avg-ms').innerText = avgMs.toFixed(1) + ' ms';
+            document.getElementById('res-voxels').innerText = megaVoxels.toLocaleString() + ' MVoxels/s';
+            document.getElementById('res-resolution').innerText = `${window.innerWidth}x${window.innerHeight}`;
+
+            const rankBadge = document.getElementById('res-rank-badge');
+            rankBadge.innerText = rank;
+            rankBadge.className = `w-24 h-24 rounded-2xl bg-gradient-to-br ${rankBg} flex items-center justify-center text-4xl font-black text-slate-950 shadow-xl border-2 border-white/40 transform rotate-3`;
+
+            document.getElementById('result-modal').classList.remove('hidden');
+        }
+
+        function closeResultModal() {
+            document.getElementById('result-modal').classList.add('hidden');
+        }
+    </script>
 </body>
 </html>
