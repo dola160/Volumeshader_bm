@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Volume Shader BM - GPU Benchmark</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -21,6 +21,7 @@
             background-color: #05070f;
             font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
 
         #canvas-container {
@@ -40,10 +41,10 @@
 
         /* Glassmorphism UI Style */
         .glass-panel {
-            background: rgba(13, 17, 28, 0.75);
+            background: rgba(13, 17, 28, 0.85);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.12);
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
         }
 
@@ -65,19 +66,20 @@
             box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
         }
 
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar {
-            width: 6px;
+        /* Custom Scrollbar cho Modal */
+        .custom-scroll::-webkit-scrollbar {
+            width: 5px;
         }
-        ::-webkit-scrollbar-track {
+        .custom-scroll::-webkit-scrollbar-track {
             background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
         }
-        ::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 3px;
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.25);
+            border-radius: 4px;
         }
-        ::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 255, 255, 0.4);
+        .custom-scroll::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.45);
         }
 
         /* Pulse Animations */
@@ -87,6 +89,14 @@
         }
         .glow-effect {
             animation: pulse-glow 2s infinite;
+        }
+
+        /* Xử lý khoảng đệm an toàn cho Notch & Home Bar trên mobile */
+        .safe-pb {
+            padding-bottom: max(1rem, env(safe-area-inset-bottom));
+        }
+        .safe-pt {
+            padding-top: max(1rem, env(safe-area-inset-top));
         }
     </style>
 </head>
@@ -98,42 +108,42 @@
     </div>
 
     <!-- UI Overlay Header / Telemetry -->
-    <header class="absolute top-4 left-4 right-4 z-10 flex flex-wrap justify-between items-center gap-4 pointer-events-none">
+    <header class="absolute top-3 left-3 right-3 sm:top-4 sm:left-4 sm:right-4 z-10 flex flex-wrap justify-between items-center gap-2 sm:gap-4 pointer-events-none">
         <!-- Title & GPU Name -->
-        <div class="glass-panel px-5 py-3 rounded-2xl pointer-events-auto flex items-center gap-4">
-            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xl font-bold shadow-lg shadow-blue-500/30">
+        <div class="glass-panel px-3 py-2 sm:px-5 sm:py-3 rounded-xl sm:rounded-2xl pointer-events-auto flex items-center gap-3">
+            <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-base sm:text-xl font-bold shadow-lg shadow-blue-500/30 shrink-0">
                 <i class="fa-solid fa-cube"></i>
             </div>
-            <div>
-                <h1 class="text-lg font-bold tracking-wider text-white flex items-center gap-2">
-                    VOLUME SHADER <span class="text-blue-400 text-xs px-2 py-0.5 rounded bg-blue-500/20 border border-blue-400/30">BM v2.5</span>
+            <div class="min-w-0">
+                <h1 class="text-xs sm:text-lg font-bold tracking-wider text-white flex items-center gap-1.5 truncate">
+                    VOLUME SHADER <span class="text-blue-400 text-[10px] sm:text-xs px-1.5 py-0.5 rounded bg-blue-500/20 border border-blue-400/30">BM v2.5</span>
                 </h1>
-                <p id="gpu-info" class="text-xs text-slate-400 font-mono">Đang khởi tạo GPU...</p>
+                <p id="gpu-info" class="text-[10px] sm:text-xs text-slate-400 font-mono truncate max-w-[180px] sm:max-w-xs">Đang khởi tạo GPU...</p>
             </div>
         </div>
 
         <!-- Live Metrics Cards -->
-        <div class="flex items-center gap-3 pointer-events-auto">
+        <div class="flex items-center gap-2 sm:gap-3 pointer-events-auto">
             <!-- FPS Badge -->
-            <div class="glass-panel px-4 py-2.5 rounded-xl flex items-center gap-3">
-                <i class="fa-solid fa-gauge-high text-emerald-400 text-lg"></i>
+            <div class="glass-panel px-3 py-1.5 sm:px-4 sm:py-2.5 rounded-xl flex items-center gap-2 sm:gap-3">
+                <i class="fa-solid fa-gauge-high text-emerald-400 text-sm sm:text-lg"></i>
                 <div>
-                    <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Tốc độ (FPS)</div>
-                    <div id="fps-val" class="text-xl font-extrabold text-emerald-400 font-mono">0.0</div>
+                    <div class="text-[9px] sm:text-[10px] uppercase tracking-wider text-slate-400 font-semibold">FPS</div>
+                    <div id="fps-val" class="text-sm sm:text-xl font-extrabold text-emerald-400 font-mono">0.0</div>
                 </div>
             </div>
 
             <!-- Frame Time Badge -->
-            <div class="glass-panel px-4 py-2.5 rounded-xl flex items-center gap-3">
-                <i class="fa-solid fa-clock text-cyan-400 text-lg"></i>
+            <div class="glass-panel px-3 py-1.5 sm:px-4 sm:py-2.5 rounded-xl flex items-center gap-2 sm:gap-3">
+                <i class="fa-solid fa-clock text-cyan-400 text-sm sm:text-lg"></i>
                 <div>
-                    <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Độ trễ Frame</div>
-                    <div id="ms-val" class="text-xl font-extrabold text-cyan-400 font-mono">0.0 ms</div>
+                    <div class="text-[9px] sm:text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Frame Time</div>
+                    <div id="ms-val" class="text-sm sm:text-xl font-extrabold text-cyan-400 font-mono">0.0 ms</div>
                 </div>
             </div>
 
-            <!-- Rays / Step Count Badge -->
-            <div class="glass-panel px-4 py-2.5 rounded-xl hidden sm:flex items-center gap-3">
+            <!-- Steps Count Badge (Desktop) -->
+            <div class="glass-panel px-4 py-2.5 rounded-xl hidden lg:flex items-center gap-3">
                 <i class="fa-solid fa-layer-group text-purple-400 text-lg"></i>
                 <div>
                     <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Số bước Marching</div>
@@ -142,15 +152,15 @@
             </div>
 
             <!-- Run Benchmark Button -->
-            <button id="btn-run-bm" onclick="startBenchmark()" class="glow-effect bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold px-5 py-3 rounded-xl shadow-lg flex items-center gap-2 transition-all transform active:scale-95 pointer-events-auto cursor-pointer border border-blue-400/30">
+            <button id="btn-run-bm" onclick="startBenchmark()" class="glow-effect bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold px-3 py-2 sm:px-5 sm:py-3 rounded-xl shadow-lg flex items-center gap-2 transition-all transform active:scale-95 pointer-events-auto cursor-pointer border border-blue-400/30 text-xs sm:text-sm">
                 <i class="fa-solid fa-bolt text-yellow-300"></i>
-                <span class="hidden md:inline">CHẠY ĐÁNH GIÁ GPU</span>
+                <span class="hidden sm:inline">CHẠY ĐÁNH GIÁ GPU</span>
             </button>
         </div>
     </header>
 
     <!-- Sidebar Controls -->
-    <aside class="absolute top-24 left-4 bottom-6 w-80 z-10 glass-panel rounded-2xl p-4 flex flex-col justify-between overflow-y-auto hidden md:flex">
+    <aside class="absolute top-20 left-4 bottom-6 w-80 z-10 glass-panel rounded-2xl p-4 flex flex-col justify-between overflow-y-auto hidden md:flex custom-scroll">
         <div class="space-y-5">
             <!-- Header section -->
             <div class="flex items-center justify-between border-b border-slate-700/60 pb-3">
@@ -252,7 +262,7 @@
         </div>
 
         <!-- Mini Live Frame Time Chart -->
-        <div class="pt-3 border-t border-slate-700/60">
+        <div class="pt-3 border-t border-slate-700/60 mt-4">
             <div class="flex justify-between items-center mb-1">
                 <span class="text-[10px] uppercase font-bold text-slate-400">Biểu Đồ Frame Time (ms)</span>
                 <span id="chart-avg-ms" class="text-[10px] font-mono text-cyan-400">Avg: --ms</span>
@@ -264,7 +274,7 @@
     </aside>
 
     <!-- Mobile Drawer Toggle Button -->
-    <button onclick="toggleMobileMenu()" class="md:hidden fixed bottom-4 right-4 z-20 glass-panel w-12 h-12 rounded-full flex items-center justify-center text-xl text-blue-400 border border-blue-400/40 shadow-lg">
+    <button onclick="toggleMobileMenu()" class="md:hidden fixed bottom-5 right-5 z-20 glass-panel w-12 h-12 rounded-full flex items-center justify-center text-xl text-blue-400 border border-blue-400/40 shadow-xl active:scale-95">
         <i class="fa-solid fa-bars"></i>
     </button>
 
@@ -302,69 +312,72 @@
         </div>
     </div>
 
-    <!-- Benchmark Results Modal -->
-    <div id="result-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md hidden p-4">
-        <div class="glass-panel w-full max-w-xl rounded-3xl p-6 sm:p-8 border border-blue-500/40 shadow-2xl relative overflow-hidden">
-            <!-- Background Glow -->
-            <div class="absolute -top-24 -right-24 w-60 h-60 bg-blue-600/20 rounded-full blur-3xl pointer-events-none"></div>
-
-            <div class="flex justify-between items-start mb-6">
-                <div>
-                    <h2 class="text-2xl font-extrabold text-white">KẾT QUẢ ĐÁNH GIÁ GPU</h2>
-                    <p id="res-gpu-name" class="text-xs text-slate-400 font-mono mt-0.5">Graphics Device</p>
+    <!-- Benchmark Results Modal (Đã tối ưu giao diện Responsive & Sửa lỗi che khuất) -->
+    <div id="result-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md hidden p-3 sm:p-6 overflow-y-auto">
+        <div class="glass-panel w-full max-w-xl rounded-2xl sm:rounded-3xl p-4 sm:p-7 border border-blue-500/40 shadow-2xl relative flex flex-col max-h-[90vh] sm:max-h-[85vh] my-auto">
+            
+            <!-- Modal Header (Cố định, không bị khuất) -->
+            <div class="flex justify-between items-start pb-3 border-b border-slate-700/50 shrink-0">
+                <div class="min-w-0 pr-2">
+                    <h2 class="text-lg sm:text-2xl font-extrabold text-white tracking-wide">KẾT QUẢ ĐÁNH GIÁ GPU</h2>
+                    <p id="res-gpu-name" class="text-[11px] sm:text-xs text-blue-400 font-mono mt-0.5 truncate">Graphics Device</p>
                 </div>
-                <button onclick="closeResultModal()" class="text-slate-400 hover:text-white text-xl">
+                <button onclick="closeResultModal()" class="w-8 h-8 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center text-base transition-colors shrink-0">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
 
-            <!-- Big Score Badge -->
-            <div class="bg-slate-900/80 border border-slate-700/80 rounded-2xl p-6 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
-                <div>
-                    <div class="text-xs uppercase tracking-widest text-slate-400 font-semibold mb-1">Điểm Số GPU (Score)</div>
-                    <div id="res-score" class="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400 font-mono">0</div>
-                    <div id="res-grade-text" class="text-xs text-emerald-400 font-bold mt-1">Xuất sắc - Đáp ứng tốt đồ họa 3D Volumetric</div>
+            <!-- Modal Content (Cuộn mượt mà nếu màn hình dọc quá ngắn) -->
+            <div class="overflow-y-auto custom-scroll py-4 space-y-4 my-1">
+                <!-- Big Score Badge -->
+                <div class="bg-slate-900/80 border border-slate-700/80 rounded-xl sm:rounded-2xl p-4 sm:p-5 flex flex-row items-center justify-between gap-3 text-left">
+                    <div class="min-w-0">
+                        <div class="text-[10px] sm:text-xs uppercase tracking-widest text-slate-400 font-semibold mb-1">Điểm Số GPU (Score)</div>
+                        <div id="res-score" class="text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400 font-mono">0</div>
+                        <div id="res-grade-text" class="text-[11px] sm:text-xs text-emerald-400 font-semibold mt-1 line-clamp-2">Xuất sắc - Đáp ứng tốt đồ họa 3D Volumetric</div>
+                    </div>
+
+                    <!-- Rank Tier Stamp -->
+                    <div id="res-rank-badge" class="w-16 h-16 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-2xl sm:text-3xl font-black text-slate-950 shadow-xl border-2 border-amber-200 transform rotate-2 shrink-0">
+                        S+
+                    </div>
                 </div>
 
-                <!-- Rank Tier Stamp -->
-                <div id="res-rank-badge" class="w-24 h-24 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-4xl font-black text-slate-950 shadow-xl border-2 border-amber-200 transform rotate-3">
-                    S+
+                <!-- Detailed Breakdown Grid -->
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 font-mono text-xs">
+                    <div class="bg-slate-900/50 p-2.5 sm:p-3 rounded-xl border border-slate-800">
+                        <span class="text-slate-400 block text-[10px] font-sans">FPS Trung Bình</span>
+                        <span id="res-avg-fps" class="text-xs sm:text-sm font-bold text-white">0.0</span>
+                    </div>
+                    <div class="bg-slate-900/50 p-2.5 sm:p-3 rounded-xl border border-slate-800">
+                        <span class="text-slate-400 block text-[10px] font-sans">1% Low FPS</span>
+                        <span id="res-low-fps" class="text-xs sm:text-sm font-bold text-amber-400">0.0</span>
+                    </div>
+                    <div class="bg-slate-900/50 p-2.5 sm:p-3 rounded-xl border border-slate-800">
+                        <span class="text-slate-400 block text-[10px] font-sans">Frame Time TB</span>
+                        <span id="res-avg-ms" class="text-xs sm:text-sm font-bold text-cyan-400">0.0 ms</span>
+                    </div>
+                    <div class="bg-slate-900/50 p-2.5 sm:p-3 rounded-xl border border-slate-800">
+                        <span class="text-slate-400 block text-[10px] font-sans">Max Ray Steps</span>
+                        <span class="text-xs sm:text-sm font-bold text-purple-400">1024 Steps</span>
+                    </div>
+                    <div class="bg-slate-900/50 p-2.5 sm:p-3 rounded-xl border border-slate-800">
+                        <span class="text-slate-400 block text-[10px] font-sans">Xử lý Voxels</span>
+                        <span id="res-voxels" class="text-xs sm:text-sm font-bold text-emerald-400">0 MVoxels/s</span>
+                    </div>
+                    <div class="bg-slate-900/50 p-2.5 sm:p-3 rounded-xl border border-slate-800">
+                        <span class="text-slate-400 block text-[10px] font-sans">Độ Phân Giải Test</span>
+                        <span id="res-resolution" class="text-xs sm:text-sm font-bold text-slate-300">360x698</span>
+                    </div>
                 </div>
             </div>
 
-            <!-- Detailed Breakdown Grid -->
-            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6 font-mono text-xs">
-                <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
-                    <span class="text-slate-400 block text-[10px]">FPS Trung Bình</span>
-                    <span id="res-avg-fps" class="text-sm font-bold text-white">0.0</span>
-                </div>
-                <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
-                    <span class="text-slate-400 block text-[10px]">1% Low FPS</span>
-                    <span id="res-low-fps" class="text-sm font-bold text-amber-400">0.0</span>
-                </div>
-                <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
-                    <span class="text-slate-400 block text-[10px]">Frame Time Trung Bình</span>
-                    <span id="res-avg-ms" class="text-sm font-bold text-cyan-400">0.0 ms</span>
-                </div>
-                <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
-                    <span class="text-slate-400 block text-[10px]">Max Ray Steps Test</span>
-                    <span class="text-sm font-bold text-purple-400">1024 Steps</span>
-                </div>
-                <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
-                    <span class="text-slate-400 block text-[10px]">Tốc độ xử lý Voxels</span>
-                    <span id="res-voxels" class="text-sm font-bold text-emerald-400">0 MVoxels/s</span>
-                </div>
-                <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
-                    <span class="text-slate-400 block text-[10px]">Độ Phân Giải Test</span>
-                    <span id="res-resolution" class="text-sm font-bold text-slate-300">1920x1080</span>
-                </div>
-            </div>
-
-            <div class="flex gap-3">
-                <button onclick="closeResultModal()" class="w-full glass-button py-3 rounded-xl font-bold text-sm text-slate-200">
+            <!-- Modal Footer (Các Nút Bấm Luôn Hiển Thị Rõ Ràng, không bị che bởi Navigation Bar) -->
+            <div class="pt-3 border-t border-slate-700/50 flex gap-3 shrink-0 safe-pb">
+                <button onclick="closeResultModal()" class="w-full glass-button py-2.5 sm:py-3 rounded-xl font-bold text-xs sm:text-sm text-slate-200 hover:bg-slate-700/70 transition-colors">
                     Đóng
                 </button>
-                <button onclick="startBenchmark()" class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold text-sm text-white transition-colors">
+                <button onclick="startBenchmark()" class="w-full bg-blue-600 hover:bg-blue-500 py-2.5 sm:py-3 rounded-xl font-bold text-xs sm:text-sm text-white transition-colors shadow-lg shadow-blue-600/30">
                     Thử Lại
                 </button>
             </div>
@@ -952,7 +965,8 @@
         function updateSteps(val) {
             config.maxSteps = parseInt(val);
             document.getElementById('steps-label').innerText = val;
-            document.getElementById('steps-val-display').innerText = val;
+            const stepsDisp = document.getElementById('steps-val-display');
+            if (stepsDisp) stepsDisp.innerText = val;
         }
 
         function updateScale(val) {
@@ -1002,6 +1016,9 @@
             const liveFps = document.getElementById('bm-live-fps');
             const liveMs = document.getElementById('bm-live-ms');
 
+            // Đóng modal kết quả cũ nếu đang mở
+            closeResultModal();
+
             modal.classList.remove('hidden');
 
             // Lưu cấu hình cũ của người dùng
@@ -1009,10 +1026,10 @@
 
             // Danh sách 4 kịch bản kiểm tra stress test
             const tests = [
-                { name: "Test 1/4: Simplex Noise Volume (Mức Nhẹ - 128 Steps)", type: 0, method: 1, steps: 128, shadows: false, scale: 1.0 },
-                { name: "Test 2/4: Gyroid Structure + Shadow Rays (Mức Trung Bình)", type: 2, method: 0, steps: 256, shadows: true, scale: 1.0 },
-                { name: "Test 3/4: 4D Julia Set Volume (Nặng - 512 Steps)", type: 1, method: 0, steps: 512, shadows: true, scale: 1.0 },
-                { name: "Test 4/4: Mandelbulb 3D Extreme Stress (Rất Nặng - 1024 Steps)", type: 3, method: 0, steps: 1024, shadows: true, scale: 1.0 }
+                { name: "Test 1/4: Simplex Noise Volume (128 Steps)", type: 0, method: 1, steps: 128, shadows: false, scale: 1.0 },
+                { name: "Test 2/4: Gyroid + Shadow Rays (256 Steps)", type: 2, method: 0, steps: 256, shadows: true, scale: 1.0 },
+                { name: "Test 3/4: 4D Julia Set Volume (512 Steps)", type: 1, method: 0, steps: 512, shadows: true, scale: 1.0 },
+                { name: "Test 4/4: Mandelbulb 3D Stress (1024 Steps)", type: 3, method: 0, steps: 1024, shadows: true, scale: 1.0 }
             ];
 
             let benchmarkFpsSamples = [];
@@ -1074,7 +1091,6 @@
             const avgMs = 1000 / avgFps;
 
             // Công thức tính điểm GPU Volume Raymarching Score
-            // Điểm dựa trên Avg FPS, 1% Low FPS và số Pixels x Max Steps
             const rawScore = Math.round((avgFps * 45) + (lowFps * 25));
 
             // Phân hạng Rank Tier
@@ -1101,7 +1117,7 @@
             }
 
             // Tính Megavoxels/s throughput ước tính
-            const megaVoxels = Math.round((canvas.width * canvas.height * 256 * avgFps) / 1000000);
+            const megaVoxels = ((canvas.width * canvas.height * 256 * avgFps) / 1000000).toFixed(3);
 
             // Cập nhật lên Result Modal
             document.getElementById('res-gpu-name').innerText = document.getElementById('gpu-info').innerText;
@@ -1110,12 +1126,12 @@
             document.getElementById('res-avg-fps').innerText = avgFps.toFixed(1) + ' FPS';
             document.getElementById('res-low-fps').innerText = lowFps.toFixed(1) + ' FPS';
             document.getElementById('res-avg-ms').innerText = avgMs.toFixed(1) + ' ms';
-            document.getElementById('res-voxels').innerText = megaVoxels.toLocaleString() + ' MVoxels/s';
+            document.getElementById('res-voxels').innerText = megaVoxels + ' MVoxels/s';
             document.getElementById('res-resolution').innerText = `${window.innerWidth}x${window.innerHeight}`;
 
             const rankBadge = document.getElementById('res-rank-badge');
             rankBadge.innerText = rank;
-            rankBadge.className = `w-24 h-24 rounded-2xl bg-gradient-to-br ${rankBg} flex items-center justify-center text-4xl font-black text-slate-950 shadow-xl border-2 border-white/40 transform rotate-3`;
+            rankBadge.className = `w-16 h-16 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl bg-gradient-to-br ${rankBg} flex items-center justify-center text-2xl sm:text-3xl font-black text-slate-950 shadow-xl border-2 border-white/40 transform rotate-2 shrink-0`;
 
             document.getElementById('result-modal').classList.remove('hidden');
         }
